@@ -1,4 +1,5 @@
 import { mkdir, readFile, writeFile } from "fs/promises";
+import os from "os";
 import path from "path";
 
 export type Listing = {
@@ -13,21 +14,48 @@ export type Listing = {
   createdAt: number;
 };
 
-const FILE = path.join(process.cwd(), ".data", "listings.json");
+/**
+ * Local cache of listing metadata that has no on-chain home — currently just a
+ * third party's callback URL.
+ *
+ * Serverless hosts mount the bundle read-only, so `process.cwd()` is not
+ * writable there and only the OS temp dir is. Set LISTINGS_DIR to point this at
+ * a volume that actually persists; otherwise treat it as a cache that can vanish
+ * between requests, and note that anything derivable from the registry is read
+ * from the chain instead.
+ */
+const DIRS = [
+  process.env.LISTINGS_DIR,
+  path.join(process.cwd(), ".data"),
+  path.join(os.tmpdir(), "inferno"),
+].filter(Boolean) as string[];
 
-async function readAll(): Promise<Listing[]> {
-  try {
-    const raw = await readFile(FILE, "utf8");
-    const parsed = JSON.parse(raw) as Listing[];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
+let resolvedFile: string | null = null;
+
+async function writableFile() {
+  if (resolvedFile) return resolvedFile;
+  for (const dir of DIRS) {
+    try {
+      await mkdir(dir, { recursive: true });
+      resolvedFile = path.join(dir, "listings.json");
+      return resolvedFile;
+    } catch {
+      // read-only or denied, try the next candidate
+    }
   }
+  return null;
 }
 
-async function writeAll(rows: Listing[]) {
-  await mkdir(path.dirname(FILE), { recursive: true });
-  await writeFile(FILE, JSON.stringify(rows, null, 2));
+async function readAll(): Promise<Listing[]> {
+  for (const dir of DIRS) {
+    try {
+      const parsed = JSON.parse(await readFile(path.join(dir, "listings.json"), "utf8")) as Listing[];
+      if (Array.isArray(parsed)) return parsed;
+    } catch {
+      // missing or unreadable, try the next candidate
+    }
+  }
+  return [];
 }
 
 export async function getListings() {
@@ -38,11 +66,23 @@ export async function getListing(agentId: number) {
   return (await readAll()).find((row) => row.agentId === agentId) ?? null;
 }
 
+/**
+ * Never throws. By the time this runs the agent is already registered on-chain
+ * and gas is spent, so failing to cache the metadata must not fail the request.
+ */
 export async function saveListing(row: Listing) {
-  const rows = await readAll();
-  const next = rows.filter((r) => r.agentId !== row.agentId);
+  const next = (await readAll()).filter((r) => r.agentId !== row.agentId);
   next.push(row);
-  await writeAll(next);
+  const file = await writableFile();
+  if (!file) {
+    console.warn(`No writable location for listings; agent ${row.agentId} metadata not cached.`);
+    return row;
+  }
+  try {
+    await writeFile(file, JSON.stringify(next, null, 2));
+  } catch (e) {
+    console.warn(`Could not cache listing for agent ${row.agentId}:`, e);
+  }
   return row;
 }
 

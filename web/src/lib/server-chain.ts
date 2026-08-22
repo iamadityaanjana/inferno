@@ -9,6 +9,46 @@ export const publicClient = createPublicClient({
 });
 
 /**
+ * Every registered agent name mapped to its id, read from the registry.
+ *
+ * The chain is the only durable record of what has been published — serverless
+ * hosts give us no writable disk — so this is what "is it listed already?" has
+ * to be answered from. Cached briefly because it costs one call per agent.
+ */
+const nameCache = { at: 0, value: new Map<string, number>() };
+const NAME_TTL_MS = 30_000;
+
+export async function readRegistryNames(): Promise<Map<string, number>> {
+  if (Date.now() - nameCache.at < NAME_TTL_MS && nameCache.value.size) return nameCache.value;
+  if (!REGISTRY) return new Map();
+  try {
+    const count = await publicClient.readContract({
+      address: REGISTRY,
+      abi: registryAbi,
+      functionName: "agentCount",
+    });
+    const ids = Array.from({ length: Number(count) }, (_, i) => i + 1);
+    const agents = await Promise.all(
+      ids.map((id) =>
+        publicClient
+          .readContract({ address: REGISTRY, abi: registryAbi, functionName: "getAgent", args: [BigInt(id)] })
+          .catch(() => null),
+      ),
+    );
+    const map = new Map<string, number>();
+    agents.forEach((agent, i) => {
+      // First registration of a name wins, so a later duplicate cannot hijack it.
+      if (agent?.name && !map.has(agent.name.toLowerCase())) map.set(agent.name.toLowerCase(), ids[i]);
+    });
+    nameCache.at = Date.now();
+    nameCache.value = map;
+    return map;
+  } catch {
+    return nameCache.value;
+  }
+}
+
+/**
  * The registry name, straight from the chain. Used to bind a paid hire back to
  * its data source without trusting the client or a local file.
  */

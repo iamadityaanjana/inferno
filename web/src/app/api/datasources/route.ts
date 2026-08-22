@@ -7,7 +7,7 @@ import { REGISTER_GAS, REGISTRY, RPC_URL } from "@/lib/contracts";
 import { allSources, readSource } from "@/lib/datasources";
 import { fail } from "@/lib/http";
 import { getListings, saveListing } from "@/lib/listings";
-import { publicClient } from "@/lib/server-chain";
+import { publicClient, readRegistryNames } from "@/lib/server-chain";
 
 function ownerAccount() {
   const raw = process.env.AGENT_PRIVATE_KEY?.trim();
@@ -25,9 +25,11 @@ export async function GET(req: Request) {
     return NextResponse.json({ probe, lines: await readSource(probe, task) });
   }
 
+  // Registry first: it is the only record that survives on a serverless host.
+  const onChain = await readRegistryNames();
   const listings = await getListings();
   const sources = allSources().map((s) => {
-    const listed = listings.find((l) => l.sourceId === s.id);
+    const agentId = onChain.get(s.name.toLowerCase()) ?? listings.find((l) => l.sourceId === s.id)?.agentId ?? null;
     return {
       id: s.id,
       name: s.name,
@@ -35,7 +37,7 @@ export async function GET(req: Request) {
       priceMon: s.priceMon,
       provider: s.provider,
       docs: s.docs,
-      agentId: listed?.agentId ?? null,
+      agentId,
     };
   });
   return NextResponse.json({ sources, canPublish: Boolean(ownerAccount()) });
@@ -56,8 +58,14 @@ export async function POST() {
       return NextResponse.json({ error: "Registry address is not configured" }, { status: 503 });
     }
 
+    // Idempotency has to be decided against the registry, not the local file.
+    // Trusting the file here is what would let a host with no writable disk
+    // register all nine feeds a second time on every button press.
+    const onChain = await readRegistryNames();
     const listings = await getListings();
-    const pending = allSources().filter((s) => !listings.some((l) => l.sourceId === s.id));
+    const pending = allSources().filter(
+      (s) => !onChain.has(s.name.toLowerCase()) && !listings.some((l) => l.sourceId === s.id),
+    );
     if (pending.length === 0) {
       return NextResponse.json({ published: [], skipped: allSources().length });
     }
