@@ -1,13 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { isAddress } from "viem";
-import { useAccount } from "wagmi";
+import { decodeEventLog, formatEther, isAddress, parseEther } from "viem";
+import { monadTestnet } from "wagmi/chains";
+import { useAccount, usePublicClient, useReadContract, useWriteContract } from "wagmi";
 import { EmptyState } from "@/components/app/EmptyState";
 import { PageHeader } from "@/components/app/PageHeader";
 import { PlugIcon } from "@/components/icons";
+import { registryAbi } from "@/lib/abi";
 import { useCatalog } from "@/lib/catalog";
-import { explorerTx } from "@/lib/contracts";
+import { REGISTRY, explorerTx, withGasBuffer } from "@/lib/contracts";
 import { mon, shortAddr } from "@/lib/format";
 import { readApiJson } from "@/lib/http";
 import type { Listing } from "@/lib/listings";
@@ -15,7 +17,8 @@ import { BTN_PRIMARY, BTN_SECONDARY, CARD, INPUT, LABEL } from "@/lib/ui";
 
 export default function AgentsPage() {
   const { address, isConnected } = useAccount();
-  const { agents, refetch } = useCatalog();
+  // Unfiltered: a lister must still see a listing they have delisted.
+  const { allAgents, refetch } = useCatalog();
   const [listings, setListings] = useState<Listing[]>([]);
   const [open, setOpen] = useState(false);
 
@@ -82,7 +85,7 @@ export default function AgentsPage() {
         ) : (
           <div className="grid gap-3 sm:grid-cols-2">
             {mine.map((listing) => {
-              const onChain = agents.find((a) => a.id === listing.agentId);
+              const onChain = allAgents.find((a) => a.id === listing.agentId);
               return (
                 <div key={listing.agentId} className={`${CARD} p-4`}>
                   <div className="flex items-start justify-between gap-3">
@@ -100,8 +103,14 @@ export default function AgentsPage() {
                         )}
                       </p>
                     </div>
-                    <span className="shrink-0 rounded-md bg-[#e8f7f2] px-2 py-0.5 text-[11px] font-medium text-[#1f8a6a]">
-                      Live
+                    <span
+                      className={`shrink-0 rounded-md px-2 py-0.5 text-[11px] font-medium ${
+                        onChain && !onChain.active
+                          ? "bg-[#f4f4f1] text-[#5f5f59]"
+                          : "bg-[#e8f7f2] text-[#1f8a6a]"
+                      }`}
+                    >
+                      {onChain && !onChain.active ? "Delisted" : "Live"}
                     </span>
                   </div>
                   <dl className="mt-3 space-y-1.5 border-t border-[#eeeeea] pt-3 text-[12px]">
@@ -272,15 +281,26 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
 }
 
 function ListingForm({ onListed }: { onListed: () => void | Promise<void> }) {
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, chainId } = useAccount();
+  const publicClient = usePublicClient();
+  const { writeContractAsync } = useWriteContract();
   const [name, setName] = useState("");
   const [capabilities, setCapabilities] = useState("");
   const [priceMon, setPriceMon] = useState("0.03");
   const [endpoint, setEndpoint] = useState("");
   const [payout, setPayout] = useState("");
   const [busy, setBusy] = useState(false);
+  const [step, setStep] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [hash, setHash] = useState<`0x${string}` | null>(null);
+
+  const { data: fee } = useReadContract({
+    address: REGISTRY,
+    abi: registryAbi,
+    functionName: "listingFee",
+    chainId: monadTestnet.id,
+    query: { enabled: Boolean(REGISTRY) },
+  });
 
   // Default to the connected wallet, but leave it editable so a lister can be
   // paid into a treasury or multisig rather than the key they happen to sign with.
@@ -296,17 +316,83 @@ function ListingForm({ onListed }: { onListed: () => void | Promise<void> }) {
       setError("Enter a valid payout address");
       return;
     }
+    if (!publicClient || !address) return;
+    if (chainId !== monadTestnet.id) {
+      setError("Switch to Monad Testnet");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch("/api/listings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, capabilities, priceMon, payout: payout.trim(), owner: address, endpoint }),
+      const args = [name, capabilities, parseEther(priceMon), payout.trim() as `0x${string}`] as const;
+      const value = fee ?? 0n;
+
+      // Estimated per call, never a fixed constant: gas scales with the length
+      // of the description, and on Monad the signer pays the whole limit.
+      setStep("Estimating gas…");
+      const estimate = await publicClient.estimateContractGas({
+        address: REGISTRY,
+        abi: registryAbi,
+        functionName: "register",
+        args,
+        value,
+        account: address,
       });
-      const data = await readApiJson<{ error?: string; hash?: `0x${string}` }>(res);
-      if (!res.ok) throw new Error(data.error ?? "Could not list");
-      setHash(data.hash ?? null);
+
+      setStep("Confirm in your wallet…");
+      const txHash = await writeContractAsync({
+        address: REGISTRY,
+        abi: registryAbi,
+        functionName: "register",
+        args,
+        value,
+        gas: withGasBuffer(estimate),
+        chainId: monadTestnet.id,
+      });
+      setHash(txHash);
+
+      setStep("Waiting for confirmation…");
+      const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+      if (receipt.status !== "success") throw new Error("Listing transaction reverted");
+
+      let agentId = 0;
+      for (const log of receipt.logs) {
+        if (log.address.toLowerCase() !== REGISTRY.toLowerCase()) continue;
+        try {
+          const decoded = decodeEventLog({
+            abi: registryAbi,
+            eventName: "AgentRegistered",
+            data: log.data,
+            topics: log.topics,
+          });
+          agentId = Number(decoded.args.id);
+        } catch {
+          // not the event we want
+        }
+      }
+      if (!agentId) throw new Error("Listed, but we could not read the new id");
+
+      // The listing already exists on-chain at this point, so a failure to save
+      // the callback URL must not read as a failed listing.
+      if (endpoint.trim()) {
+        setStep("Saving your callback URL…");
+        try {
+          const res = await fetch("/api/listings", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ agentId, txHash, endpoint: endpoint.trim() }),
+          });
+          const data = await readApiJson<{ error?: string }>(res);
+          if (!res.ok) throw new Error(data.error ?? "Could not save the callback URL");
+        } catch (err) {
+          setError(
+            `Agent #${agentId} is listed, but the callback URL did not save: ${
+              err instanceof Error ? err.message : "unknown error"
+            }`,
+          );
+        }
+      }
+
       setName("");
       setCapabilities("");
       setEndpoint("");
@@ -315,6 +401,7 @@ function ListingForm({ onListed }: { onListed: () => void | Promise<void> }) {
       setError(err instanceof Error ? err.message : "Could not list");
     } finally {
       setBusy(false);
+      setStep(null);
     }
   }
 
@@ -383,8 +470,19 @@ function ListingForm({ onListed }: { onListed: () => void | Promise<void> }) {
       </label>
       <div className="flex flex-wrap items-center gap-3 sm:col-span-2">
         <button type="submit" className={BTN_PRIMARY} disabled={!isConnected || busy || !payoutValid}>
-          {busy ? "Listing…" : isConnected ? "Publish" : "Connect to publish"}
+          {busy
+            ? (step ?? "Listing…")
+            : isConnected
+              ? fee
+                ? `Publish for ${formatEther(fee)} MON`
+                : "Publish"
+              : "Connect to publish"}
         </button>
+        {fee != null && !busy && (
+          <p className="text-[11.5px] text-[#a3a39b]">
+            One-off listing fee of {formatEther(fee)} MON, plus gas. Paid from your wallet.
+          </p>
+        )}
         {error && <p className="text-[12.5px] text-[#c0392b]">{error}</p>}
         {hash && (
           <a

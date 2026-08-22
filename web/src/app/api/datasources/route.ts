@@ -3,7 +3,7 @@ import { createWalletClient, decodeEventLog, http, parseEther } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { monadTestnet } from "viem/chains";
 import { registryAbi } from "@/lib/abi";
-import { REGISTER_GAS, REGISTRY, RPC_URL } from "@/lib/contracts";
+import { REGISTRY, RPC_URL, withGasBuffer } from "@/lib/contracts";
 import { allSources, readSource } from "@/lib/datasources";
 import { fail } from "@/lib/http";
 import { getListings, saveListing } from "@/lib/listings";
@@ -83,12 +83,22 @@ export async function POST() {
     const published: { sourceId: string; agentId: number; hash: string }[] = [];
 
     for (const source of pending) {
+      const args = [source.name, source.blurb, parseEther(source.priceMon), account.address] as const;
+      // Registry owner is exempt from the listing fee, so first-party feeds cost
+      // gas only — estimated per call, since each description is a different length.
+      const estimate = await publicClient.estimateContractGas({
+        address: REGISTRY,
+        abi: registryAbi,
+        functionName: "register",
+        args,
+        account,
+      });
       const hash = await wallet.writeContract({
         address: REGISTRY,
         abi: registryAbi,
         functionName: "register",
-        args: [source.name, source.blurb, parseEther(source.priceMon), account.address],
-        gas: REGISTER_GAS,
+        args,
+        gas: withGasBuffer(estimate),
       });
       const receipt = await publicClient.waitForTransactionReceipt({
         hash,

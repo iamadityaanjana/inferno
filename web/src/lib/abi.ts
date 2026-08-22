@@ -8,6 +8,20 @@ export const registryAbi = [
   },
   {
     type: "function",
+    name: "listingFee",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "treasury",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "address" }],
+  },
+  {
+    type: "function",
     name: "getAgent",
     stateMutability: "view",
     inputs: [{ name: "id", type: "uint256" }],
@@ -16,6 +30,7 @@ export const registryAbi = [
         name: "",
         type: "tuple",
         components: [
+          { name: "owner", type: "address" },
           { name: "name", type: "string" },
           { name: "capabilities", type: "string" },
           { name: "priceWei", type: "uint256" },
@@ -29,7 +44,7 @@ export const registryAbi = [
   {
     type: "function",
     name: "register",
-    stateMutability: "nonpayable",
+    stateMutability: "payable",
     inputs: [
       { name: "name", type: "string" },
       { name: "capabilities", type: "string" },
@@ -39,10 +54,41 @@ export const registryAbi = [
     outputs: [{ name: "id", type: "uint256" }],
   },
   {
+    type: "function",
+    name: "setPrice",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "id", type: "uint256" },
+      { name: "priceWei", type: "uint256" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "setPayout",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "id", type: "uint256" },
+      { name: "payout", type: "address" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "setActive",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "id", type: "uint256" },
+      { name: "active", type: "bool" },
+    ],
+    outputs: [],
+  },
+  {
     type: "event",
     name: "AgentRegistered",
     inputs: [
       { name: "id", type: "uint256", indexed: true },
+      { name: "owner", type: "address", indexed: true },
       { name: "name", type: "string", indexed: false },
       { name: "priceWei", type: "uint256", indexed: false },
       { name: "payout", type: "address", indexed: false },

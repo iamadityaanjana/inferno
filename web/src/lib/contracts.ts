@@ -7,9 +7,23 @@ export const PAYMENT_ROUTER = (process.env.NEXT_PUBLIC_PAYMENT_ROUTER ?? "") as 
 export const DEVIL_ESCROW = (process.env.NEXT_PUBLIC_DEVIL_ESCROW ?? "") as `0x${string}`;
 export const PAY_TO = (process.env.NEXT_PUBLIC_PAY_TO ?? "") as `0x${string}`;
 
+/**
+ * Monad charges gas on the limit, not on usage, so padding these is a direct
+ * overcharge to the signer. Both cover fixed-size calls, measured on testnet.
+ */
 export const PAY_GAS = 150_000n;
 export const ESCROW_GAS = 180_000n;
-export const REGISTER_GAS = 280_000n;
+
+/**
+ * Registration writes two dynamic strings, and every extra 32-byte word is a
+ * cold SSTORE at 8,100 gas on Monad, so cost scales with the description. Never
+ * use a fixed limit here — estimate the real call and add this much headroom.
+ */
+export const GAS_BUFFER_PERCENT = 10n;
+
+export function withGasBuffer(estimate: bigint) {
+  return estimate + (estimate * GAS_BUFFER_PERCENT) / 100n;
+}
 
 export function explorerTx(hash: string) {
   return `${EXPLORER}/tx/${hash}`;
