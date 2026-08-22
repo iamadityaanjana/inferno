@@ -1,12 +1,31 @@
 import { createPublicClient, http, parseAbiItem, decodeEventLog } from "viem";
 import { monadTestnet } from "viem/chains";
-import { PAYMENT_ROUTER, RPC_URL } from "./contracts";
-import { paymentRouterAbi } from "./abi";
+import { PAYMENT_ROUTER, REGISTRY, RPC_URL } from "./contracts";
+import { paymentRouterAbi, registryAbi } from "./abi";
 
 export const publicClient = createPublicClient({
   chain: monadTestnet,
   transport: http(RPC_URL),
 });
+
+/**
+ * The registry name, straight from the chain. Used to bind a paid hire back to
+ * its data source without trusting the client or a local file.
+ */
+export async function readAgentName(agentId: number) {
+  if (!REGISTRY || agentId < 1) return null;
+  try {
+    const agent = await publicClient.readContract({
+      address: REGISTRY,
+      abi: registryAbi,
+      functionName: "getAgent",
+      args: [BigInt(agentId)],
+    });
+    return agent.name || null;
+  } catch {
+    return null;
+  }
+}
 
 const paymentEvent = parseAbiItem(
   "event Payment(address indexed from, address indexed to, uint256 indexed agentId, uint256 amount)",

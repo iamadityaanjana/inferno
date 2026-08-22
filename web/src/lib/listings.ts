@@ -5,6 +5,8 @@ export type Listing = {
   agentId: number;
   name: string;
   endpoint?: string;
+  /** Set when the agent is backed by one of the public APIs in datasources.ts. */
+  sourceId?: string;
   payout: string;
   createdAt: number;
 };

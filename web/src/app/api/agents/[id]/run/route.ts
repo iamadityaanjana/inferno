@@ -1,12 +1,17 @@
 import { NextResponse } from "next/server";
+import { getSource, getSourceByName, readSource } from "@/lib/datasources";
 import { fail, readBody } from "@/lib/http";
 import { getListing } from "@/lib/listings";
 import { formatChatHistory, rememberChat, type ChatTurn } from "@/lib/memory";
 import { chatText } from "@/lib/openrouter";
-import { assertPaid } from "@/lib/server-chain";
+import { assertPaid, readAgentName } from "@/lib/server-chain";
 
 const SEARCH_RULE =
   "You have live web search. Search before answering anything time-sensitive and prefer what you find over memory. Say plainly when something could not be verified.";
+
+/** The reply lands in a chat bubble, so it has to read like a person talking. */
+const VOICE_RULE =
+  "Write two or three short paragraphs of plain prose for a chat window. Never output JSON, key-value lists, tables, code blocks or field names. Quote concrete numbers inside sentences and say what they mean.";
 
 const PROMPTS: Record<number, string> = {
   1: `You are a web research agent. ${SEARCH_RULE} Give 5 tight bullets of current, useful facts for the task. Use prior conversation so you do not repeat yourself. Max 140 words.`,
@@ -70,18 +75,38 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       }
     }
 
-    const system =
-      PROMPTS[agentId] ??
-      `You are ${listing?.name ?? `agent ${agentId}`}. ${body.capabilities || listing?.name || "Help with the task."} ${SEARCH_RULE} Be concise. Max 140 words.`;
+    // Data agents read a public API instead of searching the open web. The raw
+    // readings never leave this function; only the model's prose does.
+    // Falling back to the registry name means this still resolves on hosts where
+    // the listings file does not persist between requests.
+    const source =
+      (listing?.sourceId ? getSource(listing.sourceId) : null) ??
+      getSourceByName((await readAgentName(agentId)) ?? "");
+    const readings = source ? await readSource(source.id, task) : [];
 
-    const llm = await chatText(
-      system,
-      `Conversation so far:\n${formatChatHistory(history)}\n\nCurrent task: ${task}`,
-      [],
-      280,
-      { web: true },
-    );
-    const result = llm ?? `Hire confirmed. Agent ${agentId} has no live model right now.`;
+    const system = source
+      ? `You are ${source.name}, reporting live readings from ${source.provider}. ${VOICE_RULE} Work only from the readings given to you. If they are empty, say the ${source.provider} feed did not answer and give no numbers of your own. Max 160 words.`
+      : (PROMPTS[agentId] ??
+        `You are ${listing?.name ?? `agent ${agentId}`}. ${body.capabilities || listing?.name || "Help with the task."} ${SEARCH_RULE} ${VOICE_RULE} Max 140 words.`);
+
+    const prompt = source
+      ? `Conversation so far:\n${formatChatHistory(history)}\n\nCurrent task: ${task}\n\nLive readings from ${source.provider}${
+          readings.length ? ":" : " (none — the feed did not respond):"
+        }\n${readings.join("\n")}`
+      : `Conversation so far:\n${formatChatHistory(history)}\n\nCurrent task: ${task}`;
+
+    const llm = await chatText(system, prompt, [], 320, {
+      // A data agent already holds fresh numbers; searching again would only
+      // add cost and invite the model to contradict its own feed.
+      web: !source,
+      sources: !source,
+    });
+
+    const result =
+      llm ??
+      (readings.length
+        ? `${source?.provider ?? "The feed"} responded, but no model is configured to write it up.\n\n${readings.join("\n")}`
+        : `Hire confirmed. Agent ${agentId} has no live model right now.`);
 
     return NextResponse.json({ agentId, txHash: body.txHash, result });
   } catch (e) {

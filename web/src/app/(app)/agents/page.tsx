@@ -122,6 +122,13 @@ export default function AgentsPage() {
         )}
       </section>
 
+      <PublicSources
+        onPublished={async () => {
+          await load();
+          await refetch();
+        }}
+      />
+
       <section className={`${CARD} p-4`}>
         <h2 className="text-[13px] font-semibold text-[#1c1c1a]">How a hire reaches you</h2>
         <p className="mt-1 text-[13px] leading-5 text-[#8a8a82]">
@@ -142,6 +149,114 @@ export default function AgentsPage() {
         </pre>
       </section>
     </div>
+  );
+}
+
+type PublicSource = {
+  id: string;
+  name: string;
+  blurb: string;
+  priceMon: string;
+  provider: string;
+  docs: string;
+  agentId: number | null;
+};
+
+/**
+ * Free, keyless public APIs that can be published to the registry as cheap
+ * agents. Publishing is idempotent, so the button is safe to press twice.
+ */
+function PublicSources({ onPublished }: { onPublished: () => void | Promise<void> }) {
+  const [sources, setSources] = useState<PublicSource[]>([]);
+  const [canPublish, setCanPublish] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch("/api/datasources");
+      const data = await readApiJson<{ sources?: PublicSource[]; canPublish?: boolean }>(res);
+      setSources(data.sources ?? []);
+      setCanPublish(Boolean(data.canPublish));
+    } catch {
+      setSources([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function publish() {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/datasources", { method: "POST" });
+      const data = await readApiJson<{ error?: string }>(res);
+      if (!res.ok) throw new Error(data.error ?? "Could not publish");
+      await load();
+      await onPublished();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not publish");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (sources.length === 0) return null;
+  const unlisted = sources.filter((s) => s.agentId == null).length;
+
+  return (
+    <section className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="text-[13px] font-semibold text-[#1c1c1a]">Public data feeds</h2>
+          <p className="mt-0.5 text-[12.5px] leading-5 text-[#8a8a82]">
+            Free APIs that need no key. Publish one and it becomes a cheap agent the chat can hire for live numbers.
+          </p>
+        </div>
+        {canPublish && unlisted > 0 && (
+          <button type="button" className={BTN_SECONDARY} onClick={() => void publish()} disabled={busy}>
+            {busy ? "Publishing…" : `Publish ${unlisted} to marketplace`}
+          </button>
+        )}
+      </div>
+
+      {error && <p className="text-[12.5px] text-[#c0392b]">{error}</p>}
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        {sources.map((source) => (
+          <div key={source.id} className={`${CARD} p-4`}>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="truncate text-[14px] font-semibold text-[#1c1c1a]">{source.name}</p>
+                <p className="mt-0.5 text-[12px] text-[#a3a39b]">
+                  {source.provider}
+                  <span className="mx-1.5">·</span>
+                  {source.priceMon} MON per hire
+                </p>
+              </div>
+              <span
+                className={`shrink-0 rounded-md px-2 py-0.5 text-[11px] font-medium ${
+                  source.agentId != null ? "bg-[#e8f7f2] text-[#1f8a6a]" : "bg-[#f4f4f1] text-[#5f5f59]"
+                }`}
+              >
+                {source.agentId != null ? `Agent #${source.agentId}` : "Not listed"}
+              </span>
+            </div>
+            <p className="mt-2.5 text-[13px] leading-5 text-[#8a8a82]">{source.blurb}</p>
+            <a
+              href={source.docs}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-2.5 inline-block text-[12px] text-[#5f5f59] underline decoration-[#d4d4d0] hover:text-[#1c1c1a]"
+            >
+              API docs
+            </a>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 

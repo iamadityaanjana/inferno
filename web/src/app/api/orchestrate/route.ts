@@ -26,6 +26,12 @@ function fallback(task: string, catalog: CatalogAgent[]): PlanStep[] {
       if (lower.includes("defi") && hay.includes("defi")) score += 3;
       if (lower.includes("risk") && hay.includes("risk")) score += 3;
       if (lower.includes("news") && hay.includes("news")) score += 2;
+      if (/yield|apy|apr|pool|farm|lend/.test(lower) && /yield|apy|pool/.test(hay)) score += 4;
+      if (/price|worth|cost|\$|market cap/.test(lower) && hay.includes("price")) score += 4;
+      if (/tvl|locked|volume|liquidity/.test(lower) && /tvl|volume/.test(hay)) score += 4;
+      if (/sentiment|fear|greed|mood/.test(lower) && hay.includes("sentiment")) score += 4;
+      // A live feed beats a from-memory answer whenever both could serve.
+      if (hay.includes("live")) score += 2;
       if (hay.includes("research")) score += 1;
       return { agent, score };
     })
@@ -54,7 +60,7 @@ export async function POST(req: Request) {
     const raw = await chatJson(
       `You plan hires for an on-chain agent marketplace. Return JSON only: {"steps":[{"agentId":1,"reason":"..."}]}.
 Valid agents:\n${roster || "none"}
-Pick 2 or 3 agents max from that list only. Use the conversation so you do not re-hire for a question already answered unless the user asks to go deeper. Never invent prices or transactions.`,
+Pick 2 or 3 agents max from that list only. Prefer agents whose capabilities mention a live feed when the question turns on current numbers such as price, APY, TVL or volume. Use the conversation so you do not re-hire for a question already answered unless the user asks to go deeper. Never invent prices or transactions.`,
       `Conversation so far:\n${transcript}\n\nCurrent task: ${task}`,
     );
 
