@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useAccount, usePublicClient, useWriteContract } from "wagmi";
 import { AppNav } from "@/components/AppNav";
+import { buttonClass } from "@/components/Button";
 import type { PlanStep } from "@/app/api/orchestrate/route";
 import { useCatalog } from "@/lib/catalog";
 import { payAgent } from "@/lib/client-pay";
@@ -173,8 +174,8 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#f5f6f8]">
-      <div className="border-b border-[#e2e5ec] bg-white px-5 py-4">
+    <div className="flex min-h-screen flex-col bg-[#eef0f5]">
+      <div className="border-b border-[#e5e7eb] bg-white/80 px-5 py-4">
         <AppNav current="chat" />
       </div>
 
@@ -192,10 +193,10 @@ export default function ChatPage() {
             ) : (
               <div className="text-left">
                 {msg.steps && msg.steps.length > 0 && (
-                  <ol className="mb-3 space-y-1.5 border-l-2 border-[#c41e3a] pl-3 text-sm">
+                  <ol className="mb-3 space-y-1.5 border-l-2 border-[#1E3A5F] pl-3 text-sm">
                     {msg.steps.map((step) => (
                       <li key={step.id}>
-                        <span className="text-[11px] tracking-wide text-[#c41e3a]">
+                        <span className="text-[11px] tracking-wide text-[#1E3A5F]">
                           {step.status === "running" ? "…" : step.status === "error" ? "×" : "✓"}
                         </span>{" "}
                         {step.label}
@@ -219,7 +220,7 @@ export default function ChatPage() {
         <div className="mx-auto flex max-w-2xl items-end gap-2">
           <textarea
             rows={2}
-            className="min-h-[48px] flex-1 resize-none rounded-md border border-[#e2e5ec] bg-[#f5f6f8] px-3 py-2 text-[#14161c] placeholder:text-[#5a6170]"
+            className="min-h-[48px] flex-1 resize-none rounded-2xl border border-[#e5e7eb] bg-[#eef0f5] px-3 py-2 text-[#111827] placeholder:text-[#9AA1AD]"
             placeholder="Message…"
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -233,7 +234,7 @@ export default function ChatPage() {
           />
           <button
             type="submit"
-            className="rounded-md bg-[#c41e3a] px-4 py-3 text-sm font-medium text-white"
+            className={buttonClass("primary", "lg")}
             disabled={busy || !input.trim() || !contractsReady()}
           >
             {busy ? "Working" : "Send"}

@@ -5,6 +5,7 @@ import { formatEther, parseEther } from "viem";
 import { monadTestnet } from "wagmi/chains";
 import { useAccount, useBalance, usePublicClient, useWriteContract } from "wagmi";
 import { AppNav } from "@/components/AppNav";
+import { buttonClass } from "@/components/Button";
 import { Feed } from "@/components/Feed";
 import { devilEscrowAbi } from "@/lib/abi";
 import { type Activity, pushActivity } from "@/lib/activity";
@@ -212,25 +213,25 @@ export default function DevilPage() {
     <main className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-6 py-8">
       <AppNav current="devil" />
 
-      <section className="grid grid-cols-3 gap-3 text-sm">
-        <div className="rounded-lg border border-[#e2e5ec] bg-white p-3">Round {game.round} / 10</div>
-        <div className="rounded-lg border border-[#e2e5ec] bg-white p-3">{balanceMon.toFixed(3)} MON</div>
-        <div className="rounded-lg border border-[#e2e5ec] bg-white p-3">Lives {game.lives}</div>
+      <section className="grid grid-cols-3 gap-4 text-sm">
+        <div className="rounded-[18px] bg-white p-4 shadow-[0_8px_28px_rgba(28,36,51,0.06)]">Round {game.round} / 10</div>
+        <div className="rounded-[18px] bg-white p-4 shadow-[0_8px_28px_rgba(28,36,51,0.06)]">{balanceMon.toFixed(3)} MON</div>
+        <div className="rounded-[18px] bg-white p-4 shadow-[0_8px_28px_rgba(28,36,51,0.06)]">Lives {game.lives}</div>
       </section>
 
-      <section className="rounded-lg border border-[#e2e5ec] bg-white p-5">
-        <p className="text-[11px] tracking-[0.16em] text-[#c41e3a]">DEVIL</p>
+      <section className="rounded-[22px] bg-white p-6 shadow-[0_8px_28px_rgba(28,36,51,0.06)]">
+        <p className="text-[11px] tracking-[0.16em] text-[#9AA1AD]">DEVIL</p>
         <div className="mt-3 max-h-64 space-y-3 overflow-y-auto">
           {game.turns.slice(-8).map((turn, i) => (
-            <p key={`${turn.at}-${i}`} className={`text-sm leading-6 ${turn.role === "player" ? "text-[#5a6170]" : "text-[17px] leading-7"}`}>
-              <span className="text-[11px] tracking-wide text-[#5a6170]">{turn.role === "devil" ? "DEVIL" : "YOU"} · </span>
+            <p key={`${turn.at}-${i}`} className={`text-sm leading-6 ${turn.role === "player" ? "text-[#6B7280]" : "text-[17px] leading-7"}`}>
+              <span className="text-[11px] tracking-wide text-[#9AA1AD]">{turn.role === "devil" ? "DEVIL" : "YOU"} · </span>
               {turn.content}
             </p>
           ))}
           {game.turns.length === 0 && <p className="text-lg leading-7">{game.line}</p>}
         </div>
         {!game.deal && isConnected && (
-          <button className="mt-4 rounded-md bg-[#c41e3a] px-4 py-2 text-sm font-medium text-white" onClick={() => void loadLine()}>
+          <button className={buttonClass("primary", "md", "mt-4")} onClick={() => void loadLine()}>
             Hear a deal
           </button>
         )}
@@ -239,27 +240,27 @@ export default function DevilPage() {
       {game.deal && dealId == null && (
         <div className="flex gap-3">
           <button
-            className="rounded-md bg-[#c41e3a] px-4 py-2 text-sm font-medium text-white"
+            className={buttonClass("primary", "md")}
             disabled={!isConnected || busy || !contractsReady()}
             onClick={() => void accept()}
           >
             Accept {game.deal.stake} MON
           </button>
-          <button className="rounded-md border border-[#e2e5ec] bg-white px-4 py-2 text-sm" disabled={busy} onClick={reject}>
+          <button className={buttonClass("secondary", "md")} disabled={busy} onClick={reject}>
             Reject
           </button>
         </div>
       )}
 
       {dealId != null && (
-        <section className="rounded-lg border border-[#e2e5ec] bg-white p-5">
-          <h2 className="font-medium">{challenge.name}</h2>
-          <p className="text-sm text-[#5a6170]">{challenge.prompt}</p>
+        <section className="rounded-[22px] bg-white p-6 shadow-[0_8px_28px_rgba(28,36,51,0.06)]">
+          <h2 className="text-[15px] font-semibold text-[#111827]">{challenge.name}</h2>
+          <p className="text-sm text-[#6B7280]">{challenge.prompt}</p>
           <div className="mt-3 flex flex-wrap gap-2">
             {challenge.options.map((opt, i) => (
               <button
                 key={opt}
-                className="rounded-md border border-[#14161c] px-3 py-2 text-sm"
+                className={buttonClass("outline", "md")}
                 disabled={busy}
                 onClick={() => void resolve(opt)}
               >
@@ -270,7 +271,7 @@ export default function DevilPage() {
         </section>
       )}
 
-      {error && <p className="text-sm text-[#c41e3a]">{error}</p>}
+      {error && <p className="text-sm text-[#D6453D]">{error}</p>}
 
       <Feed items={feed} />
     </main>
