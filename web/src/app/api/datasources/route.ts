@@ -26,10 +26,10 @@ export async function GET(req: Request) {
   }
 
   // Registry first: it is the only record that survives on a serverless host.
-  const onChain = await readRegistryNames();
+  const { names, complete } = await readRegistryNames();
   const listings = await getListings();
   const sources = allSources().map((s) => {
-    const agentId = onChain.get(s.name.toLowerCase()) ?? listings.find((l) => l.sourceId === s.id)?.agentId ?? null;
+    const agentId = names.get(s.name.toLowerCase()) ?? listings.find((l) => l.sourceId === s.id)?.agentId ?? null;
     return {
       id: s.id,
       name: s.name,
@@ -40,7 +40,9 @@ export async function GET(req: Request) {
       agentId,
     };
   });
-  return NextResponse.json({ sources, canPublish: Boolean(ownerAccount()) });
+  // Hide the publish button when the registry could not be read in full,
+  // rather than inviting a press that would duplicate what is already there.
+  return NextResponse.json({ sources, canPublish: Boolean(ownerAccount()) && complete });
 }
 
 /**
@@ -61,10 +63,17 @@ export async function POST() {
     // Idempotency has to be decided against the registry, not the local file.
     // Trusting the file here is what would let a host with no writable disk
     // register all nine feeds a second time on every button press.
-    const onChain = await readRegistryNames();
+    const { names, complete } = await readRegistryNames();
+    if (!complete) {
+      return NextResponse.json(
+        { error: "Could not read the registry in full. Not publishing, to avoid duplicate agents." },
+        { status: 503 },
+      );
+    }
+
     const listings = await getListings();
     const pending = allSources().filter(
-      (s) => !onChain.has(s.name.toLowerCase()) && !listings.some((l) => l.sourceId === s.id),
+      (s) => !names.has(s.name.toLowerCase()) && !listings.some((l) => l.sourceId === s.id),
     );
     if (pending.length === 0) {
       return NextResponse.json({ published: [], skipped: allSources().length });

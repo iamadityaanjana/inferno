@@ -15,12 +15,42 @@ export const publicClient = createPublicClient({
  * hosts give us no writable disk — so this is what "is it listed already?" has
  * to be answered from. Cached briefly because it costs one call per agent.
  */
-const nameCache = { at: 0, value: new Map<string, number>() };
+export type RegistryNames = {
+  names: Map<string, number>;
+  /**
+   * False when any read failed. Callers deciding whether something is already
+   * registered MUST refuse to act on an incomplete map — a throttled read looks
+   * exactly like an absent agent, and acting on that registers duplicates.
+   */
+  complete: boolean;
+};
+
+const nameCache: { at: number; value: RegistryNames } = {
+  at: 0,
+  value: { names: new Map(), complete: false },
+};
 const NAME_TTL_MS = 30_000;
 
-export async function readRegistryNames(): Promise<Map<string, number>> {
-  if (Date.now() - nameCache.at < NAME_TTL_MS && nameCache.value.size) return nameCache.value;
-  if (!REGISTRY) return new Map();
+/** The public RPC throttles bursts, so read in small chunks and retry once. */
+async function readAgent(id: number) {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      return await publicClient.readContract({
+        address: REGISTRY,
+        abi: registryAbi,
+        functionName: "getAgent",
+        args: [BigInt(id)],
+      });
+    } catch {
+      if (attempt === 0) await new Promise((r) => setTimeout(r, 250));
+    }
+  }
+  return null;
+}
+
+export async function readRegistryNames(): Promise<RegistryNames> {
+  if (Date.now() - nameCache.at < NAME_TTL_MS && nameCache.value.complete) return nameCache.value;
+  if (!REGISTRY) return { names: new Map(), complete: false };
   try {
     const count = await publicClient.readContract({
       address: REGISTRY,
@@ -28,23 +58,30 @@ export async function readRegistryNames(): Promise<Map<string, number>> {
       functionName: "agentCount",
     });
     const ids = Array.from({ length: Number(count) }, (_, i) => i + 1);
-    const agents = await Promise.all(
-      ids.map((id) =>
-        publicClient
-          .readContract({ address: REGISTRY, abi: registryAbi, functionName: "getAgent", args: [BigInt(id)] })
-          .catch(() => null),
-      ),
-    );
-    const map = new Map<string, number>();
-    agents.forEach((agent, i) => {
-      // First registration of a name wins, so a later duplicate cannot hijack it.
-      if (agent?.name && !map.has(agent.name.toLowerCase())) map.set(agent.name.toLowerCase(), ids[i]);
-    });
-    nameCache.at = Date.now();
-    nameCache.value = map;
-    return map;
+    const names = new Map<string, number>();
+    let complete = true;
+
+    for (let i = 0; i < ids.length; i += 4) {
+      const chunk = ids.slice(i, i + 4);
+      const agents = await Promise.all(chunk.map(readAgent));
+      agents.forEach((agent, j) => {
+        if (!agent) {
+          complete = false;
+          return;
+        }
+        // First registration of a name wins, so a later duplicate cannot hijack it.
+        if (agent.name && !names.has(agent.name.toLowerCase())) names.set(agent.name.toLowerCase(), chunk[j]);
+      });
+    }
+
+    const result = { names, complete };
+    if (complete) {
+      nameCache.at = Date.now();
+      nameCache.value = result;
+    }
+    return result;
   } catch {
-    return nameCache.value;
+    return { names: nameCache.value.names, complete: false };
   }
 }
 
