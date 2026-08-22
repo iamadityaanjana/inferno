@@ -149,7 +149,8 @@ export default function DashboardPage() {
       for (const step of plan.steps) {
         const agent = agents.find((a) => a.id === step.agentId);
         const name = agent?.name ?? `Agent ${step.agentId}`;
-        const hash = await payAgent(step.agentId, BigInt(step.priceWei), name);
+        const price = agent?.priceWei ?? BigInt(step.priceWei);
+        const hash = await payAgent(step.agentId, price, name);
         const run = await fetch(`/api/agents/${step.agentId}/run`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
