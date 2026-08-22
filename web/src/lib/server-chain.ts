@@ -1,6 +1,6 @@
 import { createPublicClient, http, parseAbiItem, decodeEventLog } from "viem";
 import { monadTestnet } from "viem/chains";
-import { PAYMENT_ROUTER, REGISTRY, RPC_URL } from "./contracts";
+import { AGENT_CREDITS, PAYMENT_ROUTER, REGISTRY, RPC_URL } from "./contracts";
 import { paymentRouterAbi, registryAbi } from "./abi";
 
 export const publicClient = createPublicClient({
@@ -118,8 +118,11 @@ export async function assertPaid(txHash: `0x${string}`, agentId: number) {
   if (receipt.status !== "success") {
     throw new Error("Transaction failed on-chain");
   }
-  if (receipt.to?.toLowerCase() !== PAYMENT_ROUTER.toLowerCase()) {
-    throw new Error("Tx was not sent to PaymentRouter");
+  // A credit-funded hire is sent to AgentCredits, which calls the router
+  // internally, so the Payment log below is the real proof either way.
+  const allowedTo = [PAYMENT_ROUTER, AGENT_CREDITS].filter(Boolean).map((a) => a.toLowerCase());
+  if (!receipt.to || !allowedTo.includes(receipt.to.toLowerCase())) {
+    throw new Error("Tx was not sent to PaymentRouter or AgentCredits");
   }
   let matched = false;
   for (const log of receipt.logs) {

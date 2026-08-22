@@ -162,3 +162,65 @@ export const devilEscrowAbi = [
     ],
   },
 ] as const;
+
+const spendVoucherComponents = [
+  { name: "user", type: "address" },
+  { name: "maxSpendWei", type: "uint256" },
+  { name: "epoch", type: "uint256" },
+  { name: "deadline", type: "uint256" },
+] as const;
+
+export const agentCreditsAbi = [
+  { type: "function", name: "deposit", stateMutability: "payable", inputs: [], outputs: [] },
+  {
+    type: "function",
+    name: "withdraw",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "amount", type: "uint256" }],
+    outputs: [],
+  },
+  { type: "function", name: "withdrawAll", stateMutability: "nonpayable", inputs: [], outputs: [] },
+  { type: "function", name: "revokeVouchers", stateMutability: "nonpayable", inputs: [], outputs: [] },
+  {
+    type: "function",
+    name: "credits",
+    stateMutability: "view",
+    inputs: [{ name: "user", type: "address" }],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "epochOf",
+    stateMutability: "view",
+    inputs: [{ name: "user", type: "address" }],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "remaining",
+    stateMutability: "view",
+    inputs: [{ name: "voucher", type: "tuple", components: spendVoucherComponents }],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "spend",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "voucher", type: "tuple", components: spendVoucherComponents },
+      { name: "signature", type: "bytes" },
+      { name: "agentId", type: "uint256" },
+    ],
+    outputs: [{ name: "price", type: "uint256" }],
+  },
+  {
+    type: "event",
+    name: "Spent",
+    inputs: [
+      { name: "user", type: "address", indexed: true },
+      { name: "agentId", type: "uint256", indexed: true },
+      { name: "amount", type: "uint256", indexed: false },
+      { name: "balance", type: "uint256", indexed: false },
+    ],
+  },
+] as const;

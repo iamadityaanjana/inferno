@@ -5,6 +5,7 @@ export const EXPLORER = process.env.NEXT_PUBLIC_EXPLORER ?? "https://testnet.mon
 export const REGISTRY = (process.env.NEXT_PUBLIC_REGISTRY ?? "") as `0x${string}`;
 export const PAYMENT_ROUTER = (process.env.NEXT_PUBLIC_PAYMENT_ROUTER ?? "") as `0x${string}`;
 export const DEVIL_ESCROW = (process.env.NEXT_PUBLIC_DEVIL_ESCROW ?? "") as `0x${string}`;
+export const AGENT_CREDITS = (process.env.NEXT_PUBLIC_AGENT_CREDITS ?? "") as `0x${string}`;
 export const PAY_TO = (process.env.NEXT_PUBLIC_PAY_TO ?? "") as `0x${string}`;
 
 /**
@@ -13,6 +14,10 @@ export const PAY_TO = (process.env.NEXT_PUBLIC_PAY_TO ?? "") as `0x${string}`;
  */
 export const PAY_GAS = 150_000n;
 export const ESCROW_GAS = 180_000n;
+
+export function creditsReady() {
+  return Boolean(AGENT_CREDITS);
+}
 
 /**
  * Registration writes two dynamic strings, and every extra 32-byte word is a

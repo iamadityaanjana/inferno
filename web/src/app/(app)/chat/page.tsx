@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useAccount, usePublicClient, useWriteContract } from "wagmi";
+import { useAccount, usePublicClient, useSignTypedData, useWriteContract } from "wagmi";
 import { ArrowUpIcon } from "@/components/icons";
 import { Markdown } from "@/components/Markdown";
 import type { PlanStep } from "@/app/api/orchestrate/route";
@@ -23,9 +23,10 @@ const OPENERS = [
 ];
 
 export default function ChatPage() {
-  const { chainId } = useAccount();
+  const { address, chainId } = useAccount();
   const publicClient = usePublicClient();
   const { writeContractAsync } = useWriteContract();
+  const { signTypedDataAsync } = useSignTypedData();
   const { agents, refetch } = useCatalog();
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -138,10 +139,10 @@ export default function ChatPage() {
         const hash = await payAgent({
           agentId: step.agentId,
           priceWei: price,
-          auto: gate.autoPay,
-          agentPayEnabled: autoPay,
+          address,
           publicClient,
           chainId,
+          signTypedDataAsync,
           writeContractAsync,
         });
         upsertStep(asstId, { id: stepId, label: `Paid ${name} · ${mon(price)} MON`, status: "done", hash });

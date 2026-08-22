@@ -6,6 +6,7 @@ import { monadTestnet } from "wagmi/chains";
 import { useAccount, useBalance } from "wagmi";
 import { PageHeader } from "@/components/app/PageHeader";
 import { ConnectButton } from "@/components/ConnectButton";
+import { CreditsPanel } from "@/components/app/CreditsPanel";
 import { CHAIN_ID, EXPLORER, PAYMENT_ROUTER, REGISTRY, explorerAddress } from "@/lib/contracts";
 import { shortAddr } from "@/lib/format";
 import { readApiJson } from "@/lib/http";
@@ -22,7 +23,7 @@ export default function SettingsPage() {
 
   const [policy, setPolicy] = useState<Policy>(defaultPolicy);
   const [spent, setSpent] = useState(0);
-  const [autoPay, setAutoPay] = useState<boolean | null>(null);
+  const [credits, setCredits] = useState<boolean | null>(null);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
@@ -30,8 +31,8 @@ export default function SettingsPage() {
     setSpent(loadDailySpend());
     fetch("/api/pay")
       .then((r) => readApiJson<{ enabled?: boolean }>(r))
-      .then((d) => setAutoPay(Boolean(d.enabled)))
-      .catch(() => setAutoPay(false));
+      .then((d) => setCredits(Boolean(d.enabled)))
+      .catch(() => setCredits(false));
   }, []);
 
   function update(patch: Partial<Policy>) {
@@ -120,21 +121,28 @@ export default function SettingsPage() {
         </p>
       </Section>
 
+      <Section
+        title="Credits"
+        description="Top up once and hires are debited from this balance, so a multi-agent task needs one signature instead of one per hire."
+      >
+        <CreditsPanel />
+      </Section>
+
       <Section title="Signing" description="How each hire gets settled.">
         <div className="flex items-center justify-between gap-3">
           <p className="text-[13px] text-[#55554f]">
-            {autoPay === null
+            {credits === null
               ? "Checking…"
-              : autoPay
-                ? "Small hires under your approval line settle automatically. Larger ones prompt your wallet."
+              : credits
+                ? "You sign one spend approval per session, capped at 0.5 MON and expiring after an hour. Hires are debited from your credits — no popup each time."
                 : "Every hire prompts your wallet to sign."}
           </p>
           <span
             className={`shrink-0 rounded-md px-2 py-0.5 text-[11px] font-medium ${
-              autoPay ? "bg-[#e8f7f2] text-[#1f8a6a]" : "bg-[#f4f4f1] text-[#8a8a82]"
+              credits ? "bg-[#e8f7f2] text-[#1f8a6a]" : "bg-[#f4f4f1] text-[#8a8a82]"
             }`}
           >
-            {autoPay ? "Auto-pay on" : "Manual"}
+            {credits ? "Credits" : "Per-hire"}
           </span>
         </div>
       </Section>

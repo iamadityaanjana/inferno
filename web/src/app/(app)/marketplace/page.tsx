@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { useAccount, usePublicClient, useWriteContract } from "wagmi";
+import { useAccount, usePublicClient, useSignTypedData, useWriteContract } from "wagmi";
 import { AgentCard, type TileState } from "@/components/AgentCard";
 import { EmptyState } from "@/components/app/EmptyState";
 import { PageHeader } from "@/components/app/PageHeader";
@@ -16,21 +16,17 @@ import { checkPolicy, loadPolicy } from "@/lib/policy";
 import { BTN_PRIMARY, BTN_SECONDARY } from "@/lib/ui";
 
 export default function MarketplacePage() {
-  const { chainId } = useAccount();
+  const { address, chainId } = useAccount();
   const publicClient = usePublicClient();
   const { writeContractAsync } = useWriteContract();
+  const { signTypedDataAsync } = useSignTypedData();
   const { agents, refetch } = useCatalog();
   const [busyId, setBusyId] = useState<number | null>(null);
   const [states, setStates] = useState<Record<number, TileState>>({});
-  const [autoPay, setAutoPay] = useState(false);
   const [query, setQuery] = useState("");
 
   useEffect(() => {
     loadPolicy();
-    fetch("/api/pay")
-      .then((r) => readApiJson<{ enabled?: boolean }>(r))
-      .then((d) => setAutoPay(Boolean(d.enabled)))
-      .catch(() => setAutoPay(false));
   }, []);
 
   async function hire(agent: AgentView) {
@@ -47,10 +43,10 @@ export default function MarketplacePage() {
       const hash = await payAgent({
         agentId: agent.id,
         priceWei: agent.priceWei,
-        auto: gate.autoPay,
-        agentPayEnabled: autoPay,
+        address,
         publicClient,
         chainId,
+        signTypedDataAsync,
         writeContractAsync,
       });
       setStates((s) => ({ ...s, [agent.id]: { status: "running", label: "Running…", hash } }));
