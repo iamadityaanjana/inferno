@@ -136,17 +136,47 @@ function looksRelated(title: string, terms: string[]) {
   return terms.some((t) => (t.length >= 5 ? hay.includes(t.slice(0, 5)) : hay.includes(t)));
 }
 
+/** Words that follow a place name but are not part of it. */
+const NOT_A_PLACE = new Set([
+  "weather", "forecast", "rain", "raining", "rainy", "snow", "snowing", "temperature", "temp", "humidity",
+  "humid", "wind", "windy", "sunny", "sun", "cloud", "cloudy", "storm", "stormy", "hot", "cold", "climate",
+  "umbrella", "conditions", "outlook", "degrees", "celsius", "fahrenheit",
+  "today", "tomorrow", "tonight", "now", "currently", "week", "weekend", "morning", "evening", "afternoon",
+  "later", "next", "this", "coming", "right", "like", "going", "and", "or", "the", "a", "an", "is", "it",
+  "will", "be", "get", "look", "looks", "please", "me", "my", "should", "do", "does", "there",
+]);
+
 /**
- * Best guess at a place name in free text: an "in/at/for/near X" phrase first,
- * then any capitalised run that is not the opening word. Deliberately loose —
- * the geocoder is the real validator, and it returns nothing for a non-place.
+ * Best guess at a place name in free text.
+ *
+ * Case is not a signal — nobody capitalises "delhi" in a chat box — so this
+ * works off an "in/at/for/near X" phrase and falls back to whatever words are
+ * left once weather and time words are removed. Deliberately loose: the
+ * geocoder is the real validator and returns nothing for a non-place.
  */
 function placeIn(task: string) {
-  const phrase = task.match(/\b(?:in|at|for|near|around)\s+([A-Z][\w'’-]*(?:\s+[A-Z][\w'’-]*){0,2})/);
-  if (phrase) return phrase[1].trim();
-  const capitalised = task.match(/\b[A-Z][\w'’-]{2,}(?:\s+[A-Z][\w'’-]{2,})?/g) ?? [];
-  const candidate = capitalised.find((c) => !task.trimStart().startsWith(c));
-  return candidate?.trim() ?? null;
+  const words = (run: string) => run.match(/[\p{L}'’.-]+/gu) ?? [];
+
+  /** Keeps words up to the first one that cannot be part of a place name. */
+  const take = (candidates: string[]) => {
+    const out: string[] = [];
+    for (const word of candidates) {
+      if (NOT_A_PLACE.has(word.toLowerCase()) || word.length < 2) break;
+      out.push(word);
+      if (out.length === 3) break;
+    }
+    return out;
+  };
+
+  const phrase = task.match(/\b(?:in|at|for|near|around|over)\s+(.{2,60})/i);
+  if (phrase) {
+    const hit = take(words(phrase[1]));
+    if (hit.length) return hit.join(" ");
+  }
+
+  // No preposition ("delhi weather today"): whatever survives the filter.
+  const leftovers = words(task).filter((w) => !NOT_A_PLACE.has(w.toLowerCase()) && w.length >= 2);
+  return leftovers.length ? leftovers.slice(0, 3).join(" ") : null;
 }
 
 /** WMO weather codes, grouped — the full table is far more detail than a chat needs. */
