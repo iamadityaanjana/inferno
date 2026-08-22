@@ -9,6 +9,7 @@ export const PAY_TO = (process.env.NEXT_PUBLIC_PAY_TO ?? "") as `0x${string}`;
 
 export const PAY_GAS = 150_000n;
 export const ESCROW_GAS = 180_000n;
+export const REGISTER_GAS = 280_000n;
 
 export function explorerTx(hash: string) {
   return `${EXPLORER}/tx/${hash}`;

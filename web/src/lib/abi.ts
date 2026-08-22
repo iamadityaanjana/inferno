@@ -26,6 +26,28 @@ export const registryAbi = [
       },
     ],
   },
+  {
+    type: "function",
+    name: "register",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "name", type: "string" },
+      { name: "capabilities", type: "string" },
+      { name: "priceWei", type: "uint256" },
+      { name: "payout", type: "address" },
+    ],
+    outputs: [{ name: "id", type: "uint256" }],
+  },
+  {
+    type: "event",
+    name: "AgentRegistered",
+    inputs: [
+      { name: "id", type: "uint256", indexed: true },
+      { name: "name", type: "string", indexed: false },
+      { name: "priceWei", type: "uint256", indexed: false },
+      { name: "payout", type: "address", indexed: false },
+    ],
+  },
 ] as const;
 
 export const paymentRouterAbi = [

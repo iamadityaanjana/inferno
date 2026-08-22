@@ -13,7 +13,12 @@ const paymentEvent = parseAbiItem(
 );
 
 export async function assertPaid(txHash: `0x${string}`, agentId: number) {
-  const receipt = await publicClient.getTransactionReceipt({ hash: txHash });
+  const receipt = await publicClient.waitForTransactionReceipt({
+    hash: txHash,
+    confirmations: 1,
+    pollingInterval: 400,
+    timeout: 90_000,
+  });
   if (receipt.status !== "success") {
     throw new Error("Transaction failed on-chain");
   }

@@ -15,14 +15,17 @@ export const defaultPolicy: Policy = {
   requireApprovalAboveMon: 0.5,
 };
 
-export function loadPolicy(): Policy | null {
-  if (typeof window === "undefined") return null;
+export function loadPolicy(): Policy {
+  if (typeof window === "undefined") return defaultPolicy;
   const raw = localStorage.getItem(KEY);
-  if (!raw) return null;
+  if (!raw) {
+    savePolicy(defaultPolicy);
+    return defaultPolicy;
+  }
   try {
     return { ...defaultPolicy, ...JSON.parse(raw) };
   } catch {
-    return null;
+    return defaultPolicy;
   }
 }
 

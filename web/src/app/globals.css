@@ -1,27 +1,25 @@
 @import "tailwindcss";
 
 :root {
-  --soot: #0c0908;
-  --ash: #1a1410;
-  --cinder: #2b1d16;
-  --bone: #f2e6d4;
-  --ember: #c23b22;
-  --brass: #c9a36b;
-  --smoke: #9a8070;
+  --paper: #f5f6f8;
+  --card: #ffffff;
+  --ink: #14161c;
+  --mute: #5a6170;
+  --line: #e2e5ec;
+  --signal: #c41e3a;
+  --navy: #1f4b99;
+  --good: #1b7a4a;
 }
 
 html,
 body {
-  background: var(--soot);
-  color: var(--bone);
+  background: var(--paper);
+  color: var(--ink);
   min-height: 100%;
 }
 
 body {
   font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
-  background-image:
-    radial-gradient(900px 420px at 10% -10%, rgba(194, 59, 34, 0.16), transparent 50%),
-    linear-gradient(180deg, #120e0c 0%, #0c0908 40%);
 }
 
 h1,
@@ -44,7 +42,7 @@ button:disabled {
 }
 
 :focus-visible {
-  outline: 2px solid var(--brass);
+  outline: 2px solid var(--signal);
   outline-offset: 2px;
 }
 
