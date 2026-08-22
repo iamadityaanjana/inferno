@@ -7,6 +7,8 @@ export type Listing = {
   endpoint?: string;
   /** Set when the agent is backed by one of the public APIs in datasources.ts. */
   sourceId?: string;
+  /** Wallet that created the listing. Distinct from payout, which is editable. */
+  owner?: string;
   payout: string;
   createdAt: number;
 };

@@ -31,6 +31,7 @@ export async function POST(req: Request) {
       capabilities?: string;
       priceMon?: string | number;
       payout?: string;
+      owner?: string;
       endpoint?: string;
     }>(req);
 
@@ -38,6 +39,7 @@ export async function POST(req: Request) {
     const capabilities = body.capabilities?.trim() ?? "";
     const priceMon = Number(body.priceMon);
     const payout = body.payout?.trim() ?? "";
+    const owner = body.owner?.trim() ?? "";
     const endpoint = body.endpoint?.trim();
 
     if (name.length < 2 || name.length > 40) {
@@ -109,6 +111,7 @@ export async function POST(req: Request) {
       agentId,
       name,
       endpoint: safeEndpoint,
+      owner: isAddress(owner) ? owner : payout,
       payout,
       createdAt: Date.now(),
     });

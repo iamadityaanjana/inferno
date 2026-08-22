@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { decodeEventLog, formatEther, parseEther } from "viem";
 import { monadTestnet } from "wagmi/chains";
 import { useAccount, useBalance, usePublicClient, useWriteContract } from "wagmi";
@@ -32,8 +32,10 @@ export default function DevilPage() {
 
   const [game, setGame] = useState<DevilSession | null>(null);
   const [busy, setBusy] = useState(false);
+  const [thinking, setThinking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [feed, setFeed] = useState<Activity[]>([]);
+  const logRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const id = getSessionId();
@@ -44,6 +46,13 @@ export default function DevilPage() {
     if (game) saveDevil(game);
   }, [game]);
 
+  // The log is a fixed-height scroller, so new lines land below the fold. Pin to
+  // the bottom whenever a turn arrives or the Devil starts thinking.
+  useEffect(() => {
+    const el = logRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [game?.turns.length, thinking]);
+
   const challenge = CHALLENGES[((game?.round ?? 1) - 1) % CHALLENGES.length];
   const balanceMon = bal ? Number(formatEther(bal.value)) : 0;
   const dealId = game?.dealId ? BigInt(game.dealId) : null;
@@ -51,31 +60,41 @@ export default function DevilPage() {
   async function loadLine(snapshot?: DevilSession) {
     const current = snapshot ?? game;
     if (!current) return;
-    const res = await fetch("/api/devil", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        sessionId: current.id,
-        balanceMon,
-        last: current.last,
-        round: current.round,
-        lives: current.lives,
-        turns: current.turns,
-        rounds: current.rounds,
-      }),
-    });
-    const data = await readApiJson<{ line: string; deal: DevilDeal; error?: string }>(res);
-    if (!res.ok) throw new Error(data.error ?? "Devil is silent");
-    setGame((g) => {
-      const base = snapshot ?? g;
-      if (!base) return g;
-      return {
-        ...base,
-        line: data.line,
-        deal: data.deal,
-        turns: [...base.turns, { role: "devil", content: data.line, at: Date.now() }],
-      };
-    });
+    setThinking(true);
+    try {
+      const res = await fetch("/api/devil", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: current.id,
+          balanceMon,
+          last: current.last,
+          round: current.round,
+          lives: current.lives,
+          turns: current.turns,
+          rounds: current.rounds,
+        }),
+      });
+      const data = await readApiJson<{ line: string; deal: DevilDeal; error?: string }>(res);
+      if (!res.ok) throw new Error(data.error ?? "Devil is silent");
+      setGame((g) => {
+        const base = snapshot ?? g;
+        if (!base) return g;
+        return {
+          ...base,
+          line: data.line,
+          deal: data.deal,
+          turns: [...base.turns, { role: "devil", content: data.line, at: Date.now() }],
+        };
+      });
+    } finally {
+      setThinking(false);
+    }
+  }
+
+  /** Fire-and-forget version that surfaces failures instead of dropping them. */
+  function say(snapshot?: DevilSession) {
+    void loadLine(snapshot).catch((e) => setError(e instanceof Error ? e.message : "Devil is silent"));
   }
 
   async function accept() {
@@ -216,7 +235,7 @@ export default function DevilPage() {
     };
     setGame(next);
     setFeed((f) => pushActivity(f, "Rejected the deal"));
-    void loadLine(next);
+    say(next);
   }
 
   if (!game) return null;
@@ -233,7 +252,7 @@ export default function DevilPage() {
 
       <section className={`${CARD} p-4`}>
         <p className="text-[11px] tracking-[0.16em] text-[#a3a39b]">DEVIL</p>
-        <div className="mt-3 max-h-64 space-y-2.5 overflow-y-auto">
+        <div ref={logRef} className="mt-3 max-h-64 space-y-2.5 overflow-y-auto scroll-smooth">
           {game.turns.slice(-8).map((turn, i) => (
             <p
               key={`${turn.at}-${i}`}
@@ -249,11 +268,14 @@ export default function DevilPage() {
               {turn.content}
             </p>
           ))}
-          {game.turns.length === 0 && <p className="text-[15px] leading-6 text-[#1c1c1a]">{game.line}</p>}
+          {game.turns.length === 0 && !thinking && (
+            <p className="text-[15px] leading-6 text-[#1c1c1a]">{game.line}</p>
+          )}
+          {thinking && <Thinking />}
         </div>
         {!game.deal && isConnected && (
-          <button className={`${BTN_PRIMARY} mt-4`} onClick={() => void loadLine()}>
-            Hear a deal
+          <button className={`${BTN_PRIMARY} mt-4`} disabled={thinking} onClick={() => say()}>
+            {thinking ? "The Devil is thinking…" : "Hear a deal"}
           </button>
         )}
         {!isConnected && <p className="mt-4 text-[12.5px] text-[#a3a39b]">Connect a wallet to hear a deal.</p>}
@@ -263,12 +285,12 @@ export default function DevilPage() {
         <div className="flex gap-2">
           <button
             className={BTN_PRIMARY}
-            disabled={!isConnected || busy || !contractsReady()}
+            disabled={!isConnected || busy || thinking || !contractsReady()}
             onClick={() => void accept()}
           >
-            Accept {game.deal.stake} MON
+            {busy ? "Signing…" : `Accept ${game.deal.stake} MON`}
           </button>
-          <button className={BTN_SECONDARY} disabled={busy} onClick={reject}>
+          <button className={BTN_SECONDARY} disabled={busy || thinking} onClick={reject}>
             Reject
           </button>
         </div>
@@ -280,7 +302,12 @@ export default function DevilPage() {
           <p className="mt-0.5 text-[12.5px] text-[#8a8a82]">{challenge.prompt}</p>
           <div className="mt-3 flex flex-wrap gap-2">
             {challenge.options.map((opt, i) => (
-              <button key={opt} className={BTN_SECONDARY} disabled={busy} onClick={() => void resolve(opt)}>
+              <button
+                key={opt}
+                className={BTN_SECONDARY}
+                disabled={busy || thinking}
+                onClick={() => void resolve(opt)}
+              >
                 {"labels" in challenge ? challenge.labels[i] : String(opt)}
               </button>
             ))}
@@ -292,6 +319,24 @@ export default function DevilPage() {
 
       <Feed items={feed} />
     </div>
+  );
+}
+
+/** Three pulsing dots under a DEVIL label, so the wait reads as him deciding. */
+function Thinking() {
+  return (
+    <p className="flex items-center gap-2">
+      <span className="text-[11px] tracking-wide text-[#a3a39b]">DEVIL ·</span>
+      <span className="flex items-center gap-1" aria-label="The Devil is thinking" role="status">
+        {[0, 150, 300].map((delay) => (
+          <span
+            key={delay}
+            className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#a3a39b]"
+            style={{ animationDelay: `${delay}ms` }}
+          />
+        ))}
+      </span>
+    </p>
   );
 }
 

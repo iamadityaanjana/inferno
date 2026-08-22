@@ -15,7 +15,9 @@ export type SourceId =
   | "monad-tvl"
   | "monad-dex"
   | "token-prices"
+  | "trending-tokens"
   | "market-sentiment"
+  | "weather"
   | "tech-news"
   | "encyclopedia";
 
@@ -132,6 +134,34 @@ function keywords(task: string, limit = 4) {
 function looksRelated(title: string, terms: string[]) {
   const hay = title.toLowerCase();
   return terms.some((t) => (t.length >= 5 ? hay.includes(t.slice(0, 5)) : hay.includes(t)));
+}
+
+/**
+ * Best guess at a place name in free text: an "in/at/for/near X" phrase first,
+ * then any capitalised run that is not the opening word. Deliberately loose —
+ * the geocoder is the real validator, and it returns nothing for a non-place.
+ */
+function placeIn(task: string) {
+  const phrase = task.match(/\b(?:in|at|for|near|around)\s+([A-Z][\w'’-]*(?:\s+[A-Z][\w'’-]*){0,2})/);
+  if (phrase) return phrase[1].trim();
+  const capitalised = task.match(/\b[A-Z][\w'’-]{2,}(?:\s+[A-Z][\w'’-]{2,})?/g) ?? [];
+  const candidate = capitalised.find((c) => !task.trimStart().startsWith(c));
+  return candidate?.trim() ?? null;
+}
+
+/** WMO weather codes, grouped — the full table is far more detail than a chat needs. */
+function sky(code: number | undefined) {
+  if (code == null) return "unclear conditions";
+  if (code === 0) return "clear sky";
+  if (code <= 2) return "mostly clear";
+  if (code === 3) return "overcast";
+  if (code <= 48) return "fog";
+  if (code <= 57) return "drizzle";
+  if (code <= 67) return "rain";
+  if (code <= 77) return "snow";
+  if (code <= 82) return "rain showers";
+  if (code <= 86) return "snow showers";
+  return "thunderstorms";
 }
 
 /* ------------------------------------------------------------------ token ids */
@@ -297,6 +327,95 @@ const SOURCES: DataSource[] = [
         (c) =>
           `${c.name} (${c.symbol.toUpperCase()}): ${price(c.current_price)}, ${pct(c.price_change_percentage_24h)} over 24h, market cap ${usd(c.market_cap)} at rank ${c.market_cap_rank ?? "unranked"}, 24h volume ${usd(c.total_volume)}.`,
       );
+    },
+  },
+  {
+    id: "trending-tokens",
+    name: "Trending Token Watch",
+    blurb: "What the market is searching for right now — trending coins with price, 24h move and market cap, from CoinGecko",
+    priceMon: "0.01",
+    provider: "CoinGecko",
+    docs: "https://www.coingecko.com/en/api",
+    async fetch() {
+      const d = await getJson<{
+        coins?: {
+          item?: {
+            name?: string;
+            symbol?: string;
+            market_cap_rank?: number;
+            data?: { price?: number | string; market_cap?: string; price_change_percentage_24h?: { usd?: number } };
+          };
+        }[];
+      }>("https://api.coingecko.com/api/v3/search/trending");
+      const coins = (d?.coins ?? []).map((c) => c.item).filter(Boolean).slice(0, 7);
+      if (!coins.length) return [];
+      return [
+        "Tokens trending on CoinGecko by search volume right now:",
+        ...coins.map((c) => {
+          const change = c!.data?.price_change_percentage_24h?.usd;
+          const spot = typeof c!.data?.price === "number" ? price(c!.data.price as number) : String(c!.data?.price ?? "unknown");
+          return `- ${c!.name} (${(c!.symbol ?? "").toUpperCase()}): ${spot}, ${pct(change)} over 24h, market cap ${c!.data?.market_cap ?? "unknown"}, rank ${c!.market_cap_rank ?? "unranked"}`;
+        }),
+        "Trending means heavily searched, which is not the same as a good investment.",
+      ];
+    },
+  },
+  {
+    id: "weather",
+    name: "Weather Reader",
+    blurb: "Current conditions and a three-day outlook for any named town or city, from Open-Meteo",
+    priceMon: "0.01",
+    provider: "Open-Meteo",
+    docs: "https://open-meteo.com/en/docs",
+    async fetch(task) {
+      // Open-Meteo's geocoder fuzzy-matches, so "Monad yields" resolves to a
+      // town called Monada in Chad. Requiring weather intent in the question is
+      // a far better guard than trying to score the place name.
+      if (!/weather|forecast|rain|snow|temperature|temp\b|humid|wind|sunny|cloud|storm|hot|cold|climate|umbrella/i.test(task)) {
+        return [];
+      }
+      const place = placeIn(task);
+      if (!place) return [];
+
+      const geo = await getJson<{
+        results?: { name?: string; latitude?: number; longitude?: number; country?: string; admin1?: string }[];
+      }>(`https://geocoding-api.open-meteo.com/v1/search?count=1&language=en&name=${encodeURIComponent(place)}`);
+      const spot = geo?.results?.[0];
+      // No geocode means the guessed phrase was not a place. Drop out rather
+      // than reporting the weather somewhere the user never asked about.
+      if (!spot?.latitude || !spot?.longitude) return [];
+
+      const w = await getJson<{
+        current?: { temperature_2m?: number; relative_humidity_2m?: number; wind_speed_10m?: number; weather_code?: number };
+        daily?: {
+          time?: string[];
+          temperature_2m_max?: number[];
+          temperature_2m_min?: number[];
+          precipitation_probability_max?: number[];
+          weather_code?: number[];
+        };
+      }>(
+        `https://api.open-meteo.com/v1/forecast?latitude=${spot.latitude}&longitude=${spot.longitude}` +
+          `&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code` +
+          `&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code` +
+          `&forecast_days=3&timezone=auto`,
+      );
+      if (!w?.current) return [];
+
+      const where = [spot.name, spot.admin1, spot.country].filter(Boolean).join(", ");
+      const lines = [
+        `${where} right now: ${w.current.temperature_2m}°C, ${sky(w.current.weather_code)}, humidity ${w.current.relative_humidity_2m}%, wind ${w.current.wind_speed_10m} km/h.`,
+      ];
+      const daily = w.daily;
+      if (daily?.time?.length) {
+        lines.push("Next three days:");
+        daily.time.forEach((day, i) => {
+          lines.push(
+            `- ${day}: ${daily.temperature_2m_min?.[i]}°C to ${daily.temperature_2m_max?.[i]}°C, ${sky(daily.weather_code?.[i])}, ${daily.precipitation_probability_max?.[i]}% chance of rain`,
+          );
+        });
+      }
+      return lines;
     },
   },
   {

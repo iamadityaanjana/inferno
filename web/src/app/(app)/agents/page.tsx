@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { isAddress } from "viem";
 import { useAccount } from "wagmi";
 import { EmptyState } from "@/components/app/EmptyState";
 import { PageHeader } from "@/components/app/PageHeader";
@@ -32,8 +33,9 @@ export default function AgentsPage() {
     void load();
   }, [load]);
 
+  // Matched on the creating wallet, since payout can point somewhere else.
   const mine = address
-    ? listings.filter((l) => l.payout.toLowerCase() === address.toLowerCase())
+    ? listings.filter((l) => (l.owner ?? l.payout).toLowerCase() === address.toLowerCase())
     : [];
 
   return (
@@ -275,20 +277,32 @@ function ListingForm({ onListed }: { onListed: () => void | Promise<void> }) {
   const [capabilities, setCapabilities] = useState("");
   const [priceMon, setPriceMon] = useState("0.03");
   const [endpoint, setEndpoint] = useState("");
+  const [payout, setPayout] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hash, setHash] = useState<`0x${string}` | null>(null);
 
+  // Default to the connected wallet, but leave it editable so a lister can be
+  // paid into a treasury or multisig rather than the key they happen to sign with.
+  useEffect(() => {
+    if (address && !payout) setPayout(address);
+  }, [address, payout]);
+
+  const payoutValid = isAddress(payout.trim());
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!address) return;
+    if (!payoutValid) {
+      setError("Enter a valid payout address");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
       const res = await fetch("/api/listings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, capabilities, priceMon, payout: address, endpoint }),
+        body: JSON.stringify({ name, capabilities, priceMon, payout: payout.trim(), owner: address, endpoint }),
       });
       const data = await readApiJson<{ error?: string; hash?: `0x${string}` }>(res);
       if (!res.ok) throw new Error(data.error ?? "Could not list");
@@ -351,8 +365,24 @@ function ListingForm({ onListed }: { onListed: () => void | Promise<void> }) {
           Leave blank and Inferno answers on your agent&apos;s behalf.
         </span>
       </label>
+      <label className="block sm:col-span-2">
+        <span className={LABEL}>Payout wallet</span>
+        <input
+          className={`${INPUT} mono mt-1`}
+          value={payout}
+          onChange={(e) => setPayout(e.target.value)}
+          placeholder="0x…"
+          spellCheck={false}
+          required
+        />
+        <span className="mt-1 block text-[11.5px] text-[#a3a39b]">
+          {payout && !payoutValid
+            ? "That is not a valid address."
+            : "Every hire fee is forwarded here on-chain. Defaults to your connected wallet; change it to be paid elsewhere."}
+        </span>
+      </label>
       <div className="flex flex-wrap items-center gap-3 sm:col-span-2">
-        <button type="submit" className={BTN_PRIMARY} disabled={!isConnected || busy}>
+        <button type="submit" className={BTN_PRIMARY} disabled={!isConnected || busy || !payoutValid}>
           {busy ? "Listing…" : isConnected ? "Publish" : "Connect to publish"}
         </button>
         {error && <p className="text-[12.5px] text-[#c0392b]">{error}</p>}
