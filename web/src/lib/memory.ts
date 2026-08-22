@@ -27,7 +27,7 @@ export type DevilDeal = { id: number; name: string; stake: string; blurb: string
  */
 export type DevilPlanRound = {
   round: number;
-  kind: 0 | 1 | 2;
+  kind: 0 | 1 | 2 | 3;
   stake: string;
   title: string;
 };
@@ -35,7 +35,7 @@ export type DevilPlanRound = {
 export type DevilHintRound = { round: number; name: string; stake: string; blurb: string };
 
 /**
- * What an INFO deal buys. The next round's terms alone would be worthless — the
+ * What a PACT buys. The next round's terms alone would be worthless — the
  * deal blurb states them anyway — so it leaks the road ahead instead, which is
  * the only way to see whether the ladder is worth climbing.
  */

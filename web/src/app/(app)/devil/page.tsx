@@ -9,15 +9,11 @@ import { Feed } from "@/components/Feed";
 import { devilEscrowAbi } from "@/lib/abi";
 import { type Activity, pushActivity } from "@/lib/activity";
 import { DEVIL_ESCROW, ESCROW_GAS, contractsReady } from "@/lib/contracts";
+import { SAFE, kindById, mon, payoutOn } from "@/lib/devil-odds";
 import { readApiJson } from "@/lib/http";
 import type { DevilDeal, DevilHint, DevilPlanRound, DevilSession } from "@/lib/memory";
 import { emptyDevil, getSessionId, loadDevil, saveDevil } from "@/lib/session";
-import { BTN_PRIMARY, BTN_SECONDARY, CARD, INPUT } from "@/lib/ui";
-
-/** Deal kind ids, matching DevilEscrow.DealType. */
-const GUARANTEED = 0;
-const RISKY = 1;
-const INFO = 2;
+import { BTN_PRIMARY, BTN_SECONDARY, CARD } from "@/lib/ui";
 
 export default function DevilPage() {
   const { isConnected, chainId, address } = useAccount();
@@ -54,7 +50,8 @@ export default function DevilPage() {
 
   const balanceMon = bal ? Number(formatEther(bal.value)) : 0;
   const dealId = game?.dealId ? BigInt(game.dealId) : null;
-  const [luckyNumber, setLuckyNumber] = useState("7");
+  /** The digit committed with a longshot stake. Only read for those deals. */
+  const [pick, setPick] = useState("7");
 
   async function loadLine(snapshot?: DevilSession, opts: { mode?: "deal" | "hint"; round?: number } = {}) {
     const current = snapshot ?? game;
@@ -106,11 +103,23 @@ export default function DevilPage() {
     void loadLine(snapshot).catch((e) => setError(e instanceof Error ? e.message : "Devil is silent"));
   }
 
+  /**
+   * Places the bet and commits the pick in the same transaction.
+   *
+   * The pick has to land here rather than at settle time: it seeds the roll, so
+   * a pick supplied at settlement could be searched off-chain until it won.
+   */
   async function accept() {
     if (!game?.deal || !publicClient) return;
     const accepted = game.deal;
+    const kind = kindById(accepted.id);
     if (chainId !== monadTestnet.id) {
       setError("Switch to Monad Testnet");
+      return;
+    }
+    const guess = kind.needsGuess ? Number(pick) : 0;
+    if (kind.needsGuess && !validPick(pick)) {
+      setError(`Pick a digit from 0 to ${kind.guessSides - 1}`);
       return;
     }
     setBusy(true);
@@ -120,7 +129,7 @@ export default function DevilPage() {
         address: DEVIL_ESCROW,
         abi: devilEscrowAbi,
         functionName: "acceptDeal",
-        args: [accepted.id],
+        args: [accepted.id, guess],
         value: parseEther(accepted.stake),
         gas: ESCROW_GAS,
         chainId: monadTestnet.id,
@@ -151,7 +160,13 @@ export default function DevilPage() {
           dealId: id.toString(),
           turns: [
             ...g.turns,
-            { role: "player", content: `Accepted ${g.deal.name} for ${g.deal.stake} MON`, at: Date.now() },
+            {
+              role: "player",
+              content:
+                `Accepted ${g.deal.name} for ${g.deal.stake} MON` +
+                (kind.needsGuess ? ` on ${guess}` : ""),
+              at: Date.now(),
+            },
           ],
           rounds: [
             ...g.rounds,
@@ -167,23 +182,31 @@ export default function DevilPage() {
     }
   }
 
-  async function resolve(guess: number) {
+  /**
+   * Settles an accepted deal against its committed block.
+   *
+   * The contract refuses to settle until that block exists, so a fast click can
+   * legitimately revert with TooEarly; on Monad the wait is well under a second,
+   * and retrying is safe because settling is idempotent once resolved.
+   */
+  async function settle() {
     if (dealId == null || !publicClient || !game) return;
-    const kind = game.deal?.id ?? GUARANTEED;
+    const kind = kindById(game.deal?.id ?? SAFE);
     setBusy(true);
     setError(null);
     try {
       const hash = await writeContractAsync({
         address: DEVIL_ESCROW,
         abi: devilEscrowAbi,
-        functionName: "resolve",
-        args: [dealId, guess],
+        functionName: "settle",
+        args: [dealId],
         gas: ESCROW_GAS,
         chainId: monadTestnet.id,
       });
       const receipt = await publicClient.waitForTransactionReceipt({ hash });
-      if (receipt.status !== "success") throw new Error("resolve reverted");
+      if (receipt.status !== "success") throw new Error("settle reverted");
       let won = false;
+      let payout = 0n;
       for (const log of receipt.logs) {
         if (log.address.toLowerCase() !== DEVIL_ESCROW.toLowerCase()) continue;
         try {
@@ -194,20 +217,30 @@ export default function DevilPage() {
             topics: log.topics,
           });
           won = Boolean(decoded.args.won);
+          payout = decoded.args.payout;
         } catch {
           // skip
         }
       }
+      const took = Number(formatEther(payout));
       setFeed((f) =>
-        pushActivity(f, won ? "Deal resolved — you took the pot" : "Deal resolved — house kept the stake", { hash }),
+        pushActivity(f, won ? `Settled — the contract paid ${mon(took)} MON` : "Settled — house kept the stake", {
+          hash,
+          mon: won ? took : undefined,
+        }),
       );
       const next: DevilSession = {
         ...game,
-        lives: won ? game.lives : Math.max(0, game.lives - 1),
+        // A PACT that loses its coin flip still delivered the leak, so it does
+        // not cost a life — the player got what they paid for.
+        lives: won || kind.leaks ? game.lives : Math.max(0, game.lives - 1),
         dealId: null,
         last: "accept",
         round: Math.min(10, game.round + 1),
-        turns: [...game.turns, { role: "player", content: `Guess ${guess} — ${won ? "won" : "lost"}`, at: Date.now() }],
+        turns: [
+          ...game.turns,
+          { role: "player", content: `Settled ${kind.name} — ${won ? "won" : "lost"}`, at: Date.now() },
+        ],
         rounds: [
           ...game.rounds,
           {
@@ -222,12 +255,12 @@ export default function DevilPage() {
       };
       setGame(next);
       await refetch();
-      // An INFO deal's whole product is the leak, so resolving it has to deliver
-      // one. Ask about the round just finished, since the API leaks from there.
-      if (kind === INFO) await loadLine(next, { mode: "hint", round: game.round });
+      // A PACT's whole product is the leak, so settling it has to deliver one.
+      // Ask about the round just finished, since the API leaks from there.
+      if (kind.leaks) await loadLine(next, { mode: "hint", round: game.round });
       else await loadLine(next);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "resolve failed");
+      setError(e instanceof Error ? e.message : "settle failed");
     } finally {
       setBusy(false);
     }
@@ -334,21 +367,44 @@ export default function DevilPage() {
             <span className="mono text-[12px] text-[#8a8a82]">stake {game.deal.stake} MON</span>
           </div>
           <p className="mt-1 text-[12.5px] leading-5 text-[#55554f]">{game.deal.blurb}</p>
-          <p className="mt-1.5 text-[12px] leading-5 text-[#a3a39b]">
-            {game.deal.id === GUARANTEED &&
-              "Accepting locks your stake in escrow, then you claim it back with interest. No guessing involved."}
-            {game.deal.id === RISKY &&
-              "Accepting locks your stake in escrow, then you pick a number and roll. Losing costs a life."}
-            {game.deal.id === INFO &&
-              "Accepting locks your stake in escrow and you do not get it back. You get the next three rounds' terms instead."}
-          </p>
+
+          <Odds id={game.deal.id} stake={game.deal.stake} />
+
+          {kindById(game.deal.id).needsGuess && (
+            <div className="mt-3">
+              <span className="text-[11.5px] text-[#a3a39b]">
+                Pick your digit — it is locked in with your stake, so it cannot be changed at settlement
+              </span>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {Array.from({ length: kindById(game.deal.id).guessSides }, (_, d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => setPick(String(d))}
+                    className={
+                      pick === String(d)
+                        ? "mono h-8 w-8 rounded-lg bg-[#1c1c1a] text-[13px] text-white"
+                        : "mono h-8 w-8 rounded-lg bg-[#f4f4f1] text-[13px] text-[#55554f] hover:bg-[#eaeae5]"
+                    }
+                  >
+                    {d}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="mt-3 flex gap-2">
             <button
               className={BTN_PRIMARY}
               disabled={!isConnected || busy || thinking || !contractsReady()}
               onClick={() => void accept()}
             >
-              {busy ? "Signing…" : `Accept · ${game.deal.stake} MON`}
+              {busy
+                ? "Signing…"
+                : kindById(game.deal.id).needsGuess
+                  ? `Stake ${game.deal.stake} MON on ${pick}`
+                  : `Accept · ${game.deal.stake} MON`}
             </button>
             <button className={BTN_SECONDARY} disabled={busy || thinking} onClick={reject}>
               Walk away
@@ -359,65 +415,19 @@ export default function DevilPage() {
 
       {dealId != null && game.deal && (
         <section className={`${CARD} p-4`}>
-          {game.deal.id === GUARANTEED && (
-            <>
-              <h2 className="text-[13.5px] font-semibold text-[#1c1c1a]">Collect your winnings</h2>
-              <p className="mt-0.5 text-[12.5px] leading-5 text-[#8a8a82]">
-                Nothing to guess — a GUARANTEED deal always pays. Your {game.deal.stake} MON is in escrow; claiming
-                returns {mon14(game.deal.stake)} MON.
-              </p>
-              <button className={`${BTN_PRIMARY} mt-3`} disabled={busy || thinking} onClick={() => void resolve(0)}>
-                {busy ? "Signing…" : `Claim ${mon14(game.deal.stake)} MON`}
-              </button>
-            </>
-          )}
-
-          {game.deal.id === RISKY && (
-            <>
-              <h2 className="text-[13.5px] font-semibold text-[#1c1c1a]">Pick your number, then roll</h2>
-              <p className="mt-0.5 text-[12.5px] leading-5 text-[#8a8a82]">
-                Enter any number from 1 to 99. It is mixed into the on-chain roll, so no two numbers give the same
-                result — but every number carries the same odds: <strong className="text-[#55554f]">60% you win</strong>{" "}
-                {mon3(game.deal.stake)} MON, 40% the house keeps your {game.deal.stake} MON.
-              </p>
-              <div className="mt-3 flex flex-wrap items-end gap-2">
-                <label className="w-28">
-                  <span className="text-[11.5px] text-[#a3a39b]">Your number (1–99)</span>
-                  <input
-                    type="number"
-                    min="1"
-                    max="99"
-                    className={`${INPUT} mt-1`}
-                    value={luckyNumber}
-                    onChange={(e) => setLuckyNumber(e.target.value)}
-                  />
-                </label>
-                <button
-                  className={BTN_PRIMARY}
-                  disabled={busy || thinking || !validNumber(luckyNumber)}
-                  onClick={() => void resolve(Number(luckyNumber))}
-                >
-                  {busy ? "Rolling…" : `Roll with ${validNumber(luckyNumber) ? luckyNumber : "…"}`}
-                </button>
-              </div>
-              {!validNumber(luckyNumber) && (
-                <p className="mt-2 text-[12px] text-[#c0392b]">Enter a whole number between 1 and 99.</p>
-              )}
-            </>
-          )}
-
-          {game.deal.id === INFO && (
-            <>
-              <h2 className="text-[13.5px] font-semibold text-[#1c1c1a]">Collect what you paid for</h2>
-              <p className="mt-0.5 text-[12.5px] leading-5 text-[#8a8a82]">
-                No guess and no payout — your {game.deal.stake} MON stays with the house. What you get back is the next
-                three rounds&apos; terms, so you can decide whether the climb is worth it.
-              </p>
-              <button className={`${BTN_PRIMARY} mt-3`} disabled={busy || thinking} onClick={() => void resolve(0)}>
-                {busy ? "Signing…" : "Collect the leak"}
-              </button>
-            </>
-          )}
+          <h2 className="text-[13.5px] font-semibold text-[#1c1c1a]">
+            {kindById(game.deal.id).leaks ? "Collect the leak" : "Settle the bet"}
+          </h2>
+          <p className="mt-0.5 text-[12.5px] leading-5 text-[#8a8a82]">
+            Your {game.deal.stake} MON is in escrow and the outcome is already sealed — it is decided by a block that
+            did not exist when you signed, so nobody can steer it now.{" "}
+            {kindById(game.deal.id).leaks
+              ? "Settling reveals the next three rounds either way, and flips for your stake back."
+              : `Settling pays ${payoutOn(game.deal.id, game.deal.stake)} MON if it went your way.`}
+          </p>
+          <button className={`${BTN_PRIMARY} mt-3`} disabled={busy || thinking} onClick={() => void settle()}>
+            {busy ? "Settling…" : "Settle"}
+          </button>
         </section>
       )}
 
@@ -425,7 +435,7 @@ export default function DevilPage() {
         <section className={`${CARD} p-4`}>
           <div className="flex items-baseline justify-between gap-2">
             <h2 className="text-[13.5px] font-semibold text-[#1c1c1a]">The road ahead</h2>
-            <span className="text-[11px] tracking-wide text-[#a3a39b]">BOUGHT WITH AN INFO DEAL</span>
+            <span className="text-[11px] tracking-wide text-[#a3a39b]">BOUGHT WITH A PACT</span>
           </div>
           <ul className="mt-2.5 flex flex-col gap-1.5">
             {game.hint.rounds.map((r) => (
@@ -456,19 +466,44 @@ export default function DevilPage() {
   );
 }
 
-/** Payout previews, mirroring DevilEscrow.resolve so the UI cannot overpromise. */
-function mon14(stake: string) {
-  return String(Number((Number(stake) * 1.4).toFixed(4)));
-}
-
-function mon3(stake: string) {
-  return String(Number((Number(stake) * 3).toFixed(4)));
-}
-
-/** The contract takes a uint8, so the roll seed has to stay inside one byte. */
-function validNumber(raw: string) {
+/** Guesses are a single digit, matching DevilEscrow.LONGSHOT_SIDES. */
+function validPick(raw: string) {
   const n = Number(raw);
-  return Number.isInteger(n) && n >= 1 && n <= 99;
+  return Number.isInteger(n) && n >= 0 && n <= 9;
+}
+
+/**
+ * The bet laid out before it is signed: what it pays, how often, and what it
+ * costs when it misses. Every figure comes from the shared odds table, so this
+ * panel cannot drift from what the escrow will actually do.
+ */
+function Odds({ id, stake }: { id: number; stake: string }) {
+  const kind = kindById(id);
+  const win = payoutOn(id, stake);
+  const profit = mon(Number(win) - Number(stake));
+  return (
+    <div className="mt-2.5 grid grid-cols-3 gap-2">
+      <Cell label="Chance" value={`${kind.winPct}%`} />
+      <Cell label={kind.leaks ? "Refund" : "Pays"} value={`${win} MON`} />
+      <Cell
+        label={kind.leaks ? "Otherwise" : "Risk"}
+        value={kind.leaks ? "keeps stake" : `−${stake} MON`}
+      />
+      <p className="col-span-3 text-[12px] leading-5 text-[#a3a39b]">
+        {kind.summary} {!kind.leaks && `A win nets you ${profit} MON on top of your stake.`}{" "}
+        The house keeps an edge on every deal here — that is what makes it a gamble.
+      </p>
+    </div>
+  );
+}
+
+function Cell({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg bg-[#f8f8f6] px-2.5 py-2">
+      <p className="text-[10.5px] tracking-wide text-[#a3a39b]">{label.toUpperCase()}</p>
+      <p className="mono mt-0.5 text-[12.5px] text-[#1c1c1a]">{value}</p>
+    </div>
+  );
 }
 
 /** Three pulsing dots under a DEVIL label, so the wait reads as him deciding. */

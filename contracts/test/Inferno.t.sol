@@ -156,13 +156,17 @@ contract InfernoTest is Test {
         router.pay{value: 0.01 ether}(1);
     }
 
-    function testGuaranteedDealPaysOut() public {
+    function testDealSettlesAgainstACommittedBlock() public {
         address user = address(0xA11CE);
         vm.deal(user, 1 ether);
         vm.prank(user);
-        uint256 id = escrow.acceptDeal{value: 0.5 ether}(0);
-        vm.prank(user);
-        escrow.resolve(id, 1);
-        assertEq(user.balance, 1.2 ether);
+        uint256 id = escrow.acceptDeal{value: 0.1 ether}(uint8(DevilEscrow.DealType.SAFE), 0);
+
+        vm.roll(block.number + 2);
+        escrow.settle(id);
+
+        (,,,,, bool resolved,) = escrow.deals(id);
+        assertTrue(resolved, "deal settles once its anchor block exists");
+        assertEq(escrow.liability(), 0, "liability released on settle");
     }
 }

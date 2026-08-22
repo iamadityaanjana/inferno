@@ -135,26 +135,53 @@ export const devilEscrowAbi = [
     type: "function",
     name: "acceptDeal",
     stateMutability: "payable",
-    inputs: [{ name: "dealType", type: "uint8" }],
+    // The guess is committed here, not at settle time, so it cannot be searched.
+    inputs: [
+      { name: "dealType", type: "uint8" },
+      { name: "guess", type: "uint8" },
+    ],
     outputs: [{ name: "id", type: "uint256" }],
   },
   {
     type: "function",
-    name: "resolve",
+    name: "settle",
     stateMutability: "nonpayable",
-    inputs: [
-      { name: "dealId", type: "uint256" },
-      { name: "challengeGuess", type: "uint8" },
-    ],
+    inputs: [{ name: "dealId", type: "uint256" }],
     outputs: [],
   },
   {
     type: "function",
-    name: "recordRunEnd",
+    name: "sweepExpired",
     stateMutability: "nonpayable",
-    inputs: [],
+    inputs: [{ name: "dealId", type: "uint256" }],
     outputs: [],
   },
+  {
+    type: "function",
+    name: "maxStakeFor",
+    stateMutability: "view",
+    inputs: [{ name: "dealType", type: "uint8" }],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "termsFor",
+    stateMutability: "view",
+    inputs: [{ name: "dealType", type: "uint8" }],
+    outputs: [
+      {
+        type: "tuple",
+        components: [
+          { name: "winBps", type: "uint16" },
+          { name: "payBps", type: "uint32" },
+        ],
+      },
+    ],
+  },
+  { type: "function", name: "reserve", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "liability", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "dealCount", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "owner", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
   {
     type: "event",
     name: "DealAccepted",
@@ -163,6 +190,8 @@ export const devilEscrowAbi = [
       { name: "player", type: "address", indexed: true },
       { name: "dealType", type: "uint8", indexed: false },
       { name: "stake", type: "uint256", indexed: false },
+      { name: "guess", type: "uint8", indexed: false },
+      { name: "settleFrom", type: "uint256", indexed: false },
     ],
   },
   {
@@ -173,6 +202,7 @@ export const devilEscrowAbi = [
       { name: "player", type: "address", indexed: true },
       { name: "won", type: "bool", indexed: false },
       { name: "payout", type: "uint256", indexed: false },
+      { name: "roll", type: "uint256", indexed: false },
     ],
   },
 ] as const;
