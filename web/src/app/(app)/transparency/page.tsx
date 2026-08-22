@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { formatEther } from "viem";
 import { usePublicClient } from "wagmi";
 import { PageHeader } from "@/components/app/PageHeader";
-import { agentCreditsAbi, registryAbi } from "@/lib/abi";
+import { agentCreditsAbi, devilEscrowAbi, registryAbi } from "@/lib/abi";
 import {
   AGENT_CREDITS,
   CHAIN_ID,
@@ -46,8 +46,12 @@ const CONTRACTS: Contract[] = [
   {
     name: "DevilEscrow",
     address: DEVIL_ESCROW,
-    role: "Holds Devil Mode stakes while a deal is open, and pays out when it resolves.",
-    holdsFunds: "Open stakes plus the house float. It has no withdraw function, so nobody can pull the float out.",
+    role:
+      "Holds Devil Mode stakes while a deal is open and settles it against a block that did not exist when you bet. " +
+      "It refuses any bet whose maximum payout it cannot already cover.",
+    holdsFunds:
+      "Open stakes plus the house float. The float is withdrawable by the house, but only the part not promised " +
+      "to an open deal — a winning bet can always be paid in full.",
   },
 ];
 
@@ -60,6 +64,8 @@ type Live = {
   creditsOperator: `0x${string}`;
   creditsHeld: bigint;
   escrowHeld: bigint;
+  /** Payouts the escrow has already promised to open deals. */
+  escrowLocked: bigint;
 };
 
 export default function TransparencyPage() {
@@ -78,7 +84,7 @@ export default function TransparencyPage() {
         publicClient.readContract({ ...registry, functionName: "router" }),
         publicClient.readContract({ ...registry, functionName: "owner" }),
       ]);
-      const [creditsOperator, creditsHeld, escrowHeld] = await Promise.all([
+      const [creditsOperator, creditsHeld, escrowHeld, escrowLocked] = await Promise.all([
         AGENT_CREDITS
           ? publicClient.readContract({
               address: AGENT_CREDITS,
@@ -88,6 +94,9 @@ export default function TransparencyPage() {
           : Promise.resolve("0x" as `0x${string}`),
         AGENT_CREDITS ? publicClient.getBalance({ address: AGENT_CREDITS }) : Promise.resolve(0n),
         DEVIL_ESCROW ? publicClient.getBalance({ address: DEVIL_ESCROW }) : Promise.resolve(0n),
+        DEVIL_ESCROW
+          ? publicClient.readContract({ address: DEVIL_ESCROW, abi: devilEscrowAbi, functionName: "liability" })
+          : Promise.resolve(0n),
       ]);
       setLive({
         agentCount,
@@ -98,6 +107,7 @@ export default function TransparencyPage() {
         creditsOperator: creditsOperator as `0x${string}`,
         creditsHeld,
         escrowHeld,
+        escrowLocked,
       });
     } catch {
       setFailed(true);
@@ -131,6 +141,7 @@ export default function TransparencyPage() {
             <Stat label="Listing fee" value={`${formatEther(live.listingFee)} MON`} />
             <Stat label="Credits held for users" value={`${formatEther(live.creditsHeld)} MON`} />
             <Stat label="Devil escrow balance" value={`${formatEther(live.escrowHeld)} MON`} />
+            <Stat label="Reserved for open bets" value={`${formatEther(live.escrowLocked)} MON`} />
             <Stat label="Listing fees go to" value={live.treasury} mono />
             <Stat label="Registry owner" value={live.registryOwner} mono />
             <Stat label="Credits operator (gas only)" value={live.creditsOperator} mono />
@@ -183,8 +194,9 @@ export default function TransparencyPage() {
             for.
           </li>
           <li>
-            <span className="font-medium text-[#1c1c1a]">Devil Mode.</span> Your stake sits in DevilEscrow until the
-            deal resolves, then pays out by the multiplier in the contract.
+            <span className="font-medium text-[#1c1c1a]">Devil Mode.</span> Your stake sits in DevilEscrow until you
+            settle, then pays by the odds in <span className="mono">termsFor</span> — which are fixed in the contract
+            and readable before you bet. Every deal keeps a house edge, so the game is a gamble, not a faucet.
           </li>
           <li>
             <span className="font-medium text-[#1c1c1a]">Topping up credits.</span> Your deposit is recorded against
@@ -207,7 +219,18 @@ export default function TransparencyPage() {
             can={false}
             text="We cannot list an agent on your behalf, change your price, or redirect your earnings. Those calls only accept the listing's owner."
           />
-          <Claim can={false} text="We cannot take the Devil Mode float. The escrow has no withdraw function at all." />
+          <Claim
+            can={false}
+            text="We cannot touch a stake you have riding. The escrow reserves the full payout of every open deal and only lets the house withdraw what is left over."
+          />
+          <Claim
+            can={false}
+            text="We cannot steer a roll. The outcome comes from the hash of a block mined after you signed, and your pick is locked in with your stake, so neither side can search for a result."
+          />
+          <Claim
+            can
+            text="We can withdraw house profits — the float minus every open deal's reserved payout. Read reserve() and liability() on the escrow to see exactly how much that is."
+          />
           <Claim
             can
             text="We can force an agent off the marketplace for moderation — but not edit it, and not switch it back on. Only its owner can relist it."
