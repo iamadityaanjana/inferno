@@ -10,6 +10,15 @@ gsap.registerPlugin(ScrollTrigger);
 
 export type Feature = { icon: ReactNode; label: string };
 
+/** Which band of the painted landscape backs the tile: sky, horizon, or field. */
+export type Crop = "top" | "middle" | "bottom";
+
+const CROP_POSITION: Record<Crop, string> = {
+  top: "center 8%",
+  middle: "center 52%",
+  bottom: "center 96%",
+};
+
 type Props = {
   title: string;
   description: string;
@@ -17,9 +26,18 @@ type Props = {
   visual: ReactNode;
   cta: { label: string; href: string };
   reverse?: boolean;
+  crop?: Crop;
 };
 
-export function FeatureSection({ title, description, features, visual, cta, reverse = false }: Props) {
+export function FeatureSection({
+  title,
+  description,
+  features,
+  visual,
+  cta,
+  reverse = false,
+  crop = "middle",
+}: Props) {
   const root = useRef<HTMLElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
 
@@ -63,9 +81,23 @@ export function FeatureSection({ title, description, features, visual, cta, reve
       >
         <div
           ref={cardRef}
-          className="relative aspect-[4/3] overflow-hidden rounded-3xl bg-[#f7f8fa] shadow-xl ring-1 ring-black/5 will-change-transform"
+          className="relative aspect-[4/3] overflow-hidden rounded-3xl bg-[var(--hero-fallback)] shadow-xl ring-1 ring-black/5 will-change-transform"
         >
-          {visual}
+          {/* Each tile pulls a different band of the same painting. Scaled up so
+              the blur has no edge to bleed against, then washed back so the
+              cards and grey type on top stay readable. */}
+          <div
+            aria-hidden
+            className="absolute inset-0 scale-110"
+            style={{
+              backgroundImage: "url(/tile.webp)",
+              backgroundSize: "cover",
+              backgroundPosition: CROP_POSITION[crop],
+              filter: "blur(2px)",
+            }}
+          />
+          <div aria-hidden className="absolute inset-0 bg-[#faf9f7]/70" />
+          <div className="relative h-full">{visual}</div>
         </div>
 
         <div className="flex flex-col">

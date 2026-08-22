@@ -18,11 +18,14 @@ export async function POST(req: Request) {
     const history = rememberChat(body.sessionId || "anon", body.history ?? []);
     const packed = body.results.map((r) => `Agent ${r.agentId} (tx ${r.txHash}):\n${r.result}`).join("\n\n");
 
+    // The hired agents already searched; this call only reconciles their notes,
+    // so it runs without web search and just carries their links through.
     const llm = await chatText(
-      "Synthesize a final answer from hired-agent notes and the prior conversation. Stay consistent with what you already told the user. Be direct. Mention this is not financial advice. Max 220 words.",
+      "Synthesize a final answer from hired-agent notes and the prior conversation. Stay consistent with what you already told the user. Keep any source links the notes carry, listed once at the end. Be direct. Mention this is not financial advice. Max 220 words.",
       `Conversation so far:\n${formatChatHistory(history)}\n\nCurrent task: ${body.task}\n\n${packed}`,
       [],
       420,
+      { web: false },
     );
 
     const answer =

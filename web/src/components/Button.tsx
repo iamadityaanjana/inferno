@@ -1,14 +1,22 @@
 type Variant = "primary" | "secondary" | "outline" | "ghost";
 type Size = "sm" | "md" | "lg";
 
+/**
+ * Buttons for the landing page. Same ink-on-warm-neutral palette as the app
+ * shell's BTN_* primitives in lib/ui, only with the larger sizes the marketing
+ * page needs — one button language across the product.
+ *
+ * Every filled variant states both `bg-*` and `text-*`. Never rely on inherited
+ * colour here: these classes land on `<Link>` as often as on `<button>`.
+ */
 const BASE =
   "inline-flex items-center justify-center gap-2 rounded-[10px] font-medium transition-colors disabled:pointer-events-none";
 
 const VARIANTS: Record<Variant, string> = {
-  primary: "bg-[#1E3A5F] text-white hover:bg-[#16304f]",
-  secondary: "bg-white text-[#1E3A5F] border border-[#dfe3ea] hover:border-[#1E3A5F]",
-  outline: "bg-transparent text-[#1E3A5F] border border-[#1E3A5F] hover:bg-[#eef2f8]",
-  ghost: "bg-transparent text-[#6B7280] hover:bg-[#f1f3f7] hover:text-[#111827]",
+  primary: "bg-[#1c1c1a] text-white hover:bg-[#33332f]",
+  secondary: "bg-white text-[#1c1c1a] border border-[#e6e6e2] hover:border-[#c9c9c2]",
+  outline: "bg-transparent text-[#1c1c1a] border border-[#c9c9c2] hover:bg-[#e9e9e4]",
+  ghost: "bg-transparent text-[#5f5f59] hover:bg-[#e9e9e4] hover:text-[#1c1c1a]",
 };
 
 const SIZES: Record<Size, string> = {

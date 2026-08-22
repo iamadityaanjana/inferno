@@ -5,12 +5,15 @@ import { formatChatHistory, rememberChat, type ChatTurn } from "@/lib/memory";
 import { chatText } from "@/lib/openrouter";
 import { assertPaid } from "@/lib/server-chain";
 
+const SEARCH_RULE =
+  "You have live web search. Search before answering anything time-sensitive and prefer what you find over memory. Say plainly when something could not be verified.";
+
 const PROMPTS: Record<number, string> = {
-  1: "You are a web research agent. Give 5 tight bullets of current, useful facts for the task. Use prior conversation so you do not repeat yourself. If you lack live search, say so and reason from known public info. Max 140 words.",
-  2: "You are a Monad DeFi analyst. Name 2-3 realistic opportunity types on Monad (DEX, lending, LST) and what to check. Stay consistent with earlier answers. No financial advice. Max 140 words.",
-  3: "You are a news agent. Summarize the most relevant recent themes for the task, given the conversation. Max 120 words.",
-  4: "You are a risk agent. Score 1-10 and list 3 concrete risks. Reference earlier context if the user is following up. Max 100 words.",
-  5: "You are a general researcher. Give a concise brief that builds on the prior conversation. Max 120 words.",
+  1: `You are a web research agent. ${SEARCH_RULE} Give 5 tight bullets of current, useful facts for the task. Use prior conversation so you do not repeat yourself. Max 140 words.`,
+  2: `You are a Monad DeFi analyst. ${SEARCH_RULE} Name 2-3 realistic opportunity types on Monad (DEX, lending, LST) and what to check, with current numbers where you can find them. Stay consistent with earlier answers. No financial advice. Max 140 words.`,
+  3: `You are a news agent. ${SEARCH_RULE} Summarize the most relevant recent themes for the task, given the conversation, and date each one. Max 120 words.`,
+  4: `You are a risk agent. ${SEARCH_RULE} Score 1-10 and list 3 concrete risks. Reference earlier context if the user is following up. Max 100 words.`,
+  5: `You are a general researcher. ${SEARCH_RULE} Give a concise brief that builds on the prior conversation. Max 120 words.`,
 };
 
 async function callEndpoint(endpoint: string, payload: unknown) {
@@ -69,13 +72,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
     const system =
       PROMPTS[agentId] ??
-      `You are ${listing?.name ?? `agent ${agentId}`}. ${body.capabilities || listing?.name || "Help with the task."} Be concise. Max 140 words.`;
+      `You are ${listing?.name ?? `agent ${agentId}`}. ${body.capabilities || listing?.name || "Help with the task."} ${SEARCH_RULE} Be concise. Max 140 words.`;
 
     const llm = await chatText(
       system,
       `Conversation so far:\n${formatChatHistory(history)}\n\nCurrent task: ${task}`,
       [],
       280,
+      { web: true },
     );
     const result = llm ?? `Hire confirmed. Agent ${agentId} has no live model right now.`;
 

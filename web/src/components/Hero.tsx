@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import gsap from "gsap";
 import { TaskLauncher } from "./TaskLauncher";
 
-const BG = "/bg.webp";
+const BG = "/tile.webp";
 
 export function Hero() {
   const container = useRef<HTMLDivElement>(null);
@@ -51,13 +51,33 @@ export function Hero() {
 
   return (
     <section className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden">
-      {/* Drop bg.webp in web/public to replace the flat fallback. */}
-      <div className="absolute inset-0 -z-10 bg-[var(--hero-fallback)]">
+      <div className="absolute inset-0 bg-[var(--hero-fallback)]">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={BG} alt="" fetchPriority="high" decoding="async" className="h-full w-full object-cover object-center" />
+        {/* Two thin bands only: one so the fixed nav clears the dark foliage,
+            one so the fold hands off to the cream section below. The middle is
+            left alone — the photo is the point. */}
+        <div
+          aria-hidden
+          className="absolute inset-0"
+          style={{
+            background:
+              "linear-gradient(to bottom, rgba(250,249,247,0.55) 0%, rgba(250,249,247,0.08) 16%, rgba(250,249,247,0) 50%, rgba(250,249,247,0.45) 88%, rgba(250,249,247,0.94) 100%)",
+          }}
+        />
+        <div
+          aria-hidden
+          className="absolute inset-0"
+          style={{
+            background: "radial-gradient(58% 40% at 50% 44%, rgba(255,253,247,0.3) 0%, rgba(255,253,247,0) 72%)",
+          }}
+        />
       </div>
 
-      <div ref={container} className="-mt-10 flex max-w-3xl flex-col items-center px-5 text-center sm:-mt-14">
+      <div
+        ref={container}
+        className="relative z-10 -mt-10 flex max-w-3xl flex-col items-center px-5 text-center sm:-mt-14"
+      >
         <span
           data-animate
           className="mb-5 inline-flex items-center gap-2 rounded-full bg-white/60 px-3.5 py-1.5 text-xs font-medium text-[#44403c] shadow-sm ring-1 ring-black/5 backdrop-blur-sm sm:text-sm"

@@ -9,16 +9,16 @@
 }
 
 :root {
-  --paper: #eef0f5;
+  /* Warm neutrals, shared by the landing page and the app shell. */
+  --paper: #f1f1ef;
   --card: #ffffff;
-  --ink: #111827;
-  --mute: #6b7280;
-  --line: #e5e7eb;
-  --navy: #1e3a5f;
-  --good: #22c55e;
+  --ink: #1c1c1a;
+  --mute: #8a8a82;
+  --line: #e4e4e0;
+  --good: #1f8a6a;
   --link: #2f6fed;
   /* Sits behind the hero image so the fold never flashes white. */
-  --hero-fallback: #e9e3dd;
+  --hero-fallback: #d9d2b8;
 }
 
 html {
@@ -53,33 +53,36 @@ h1,
   letter-spacing: -0.01em;
 }
 
-a {
-  color: inherit;
-}
-
-button:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
 .mono {
   font-family: var(--font-geist-mono), ui-monospace, monospace;
 }
 
-:focus-visible {
-  outline: 2px solid var(--navy);
-  outline-offset: 2px;
-}
-
-/* Layered so Tailwind utilities still win. Without this, the browser's own
-   button face shows through in OS dark mode. */
+/* Everything that could collide with a Tailwind utility lives in `base`, which
+   the framework orders before `utilities`. Unlayered rules outrank *every*
+   layer, so an unlayered `a { color: inherit }` silently beats `text-white` and
+   paints dark text onto dark filled links. Keep element defaults in here. */
 @layer base {
+  a {
+    color: inherit;
+  }
+
+  /* Without this the browser's own button face shows through in OS dark mode. */
   button,
   input,
   textarea,
   select {
     color: inherit;
     background-color: transparent;
+  }
+
+  button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--ink);
+    outline-offset: 2px;
   }
 }
 

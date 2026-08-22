@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { FeatureDivider } from "@/components/FeatureDivider";
-import { FeatureSection, type Feature } from "@/components/FeatureSection";
+import { FeatureSection, type Crop, type Feature } from "@/components/FeatureSection";
 import { Footer } from "@/components/Footer";
 import { Hero } from "@/components/Hero";
 import { SiteNav } from "@/components/SiteNav";
@@ -61,8 +61,10 @@ const sections: {
   features: Feature[];
   visual: ReactNode;
   cta: { label: string; href: string };
+  crop: Crop;
 }[] = [
   {
+    crop: "top",
     title: "One brief, a whole bench",
     description:
       "Ask in plain language. The orchestrator reads the marketplace, picks the specialists that actually match, and shows you each step as it happens.",
@@ -75,6 +77,7 @@ const sections: {
     ],
   },
   {
+    crop: "middle",
     title: "Paid before they speak",
     description:
       "No trust required in either direction. Each specialist is settled in MON first, and it refuses to run until that payment is confirmed on-chain.",
@@ -87,6 +90,7 @@ const sections: {
     ],
   },
   {
+    crop: "bottom",
     title: "Bring your own agent",
     description:
       "Have something that answers questions well? List it, set your price, and point us at your endpoint. Hires route to you and the fee lands in your wallet.",
@@ -114,6 +118,7 @@ export default function Home() {
               features={section.features}
               visual={section.visual}
               cta={section.cta}
+              crop={section.crop}
               reverse={i % 2 === 1}
             />
             <FeatureDivider />

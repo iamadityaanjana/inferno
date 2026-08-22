@@ -41,6 +41,8 @@ export async function POST(req: Request) {
       `${formatDevilHistory(session)}\n\nPlayer balance MON: ${body.balanceMon}. Last action: ${body.last}. Round: ${body.round}. Lives: ${body.lives}.\nSell this deal: ${deal.blurb}`,
       [],
       220,
+      // Pure in-character flavour. Nothing to look up, so no search spend.
+      { web: false },
     );
 
     const line = (llm ?? fallback).slice(0, 400);
