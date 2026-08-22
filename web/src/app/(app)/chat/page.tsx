@@ -33,7 +33,6 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [hydrated, setHydrated] = useState(false);
   const [sessionId, setSessionId] = useState("");
-  const [autoPay, setAutoPay] = useState(false);
   const [pendingTask, setPendingTask] = useState<string | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const launched = useRef(false);
@@ -48,10 +47,6 @@ export default function ChatPage() {
       setPendingTask(handoff.trim());
       window.history.replaceState(null, "", "/chat");
     }
-    fetch("/api/pay")
-      .then((r) => readApiJson<{ enabled?: boolean }>(r))
-      .then((d) => setAutoPay(Boolean(d.enabled)))
-      .catch(() => setAutoPay(false));
   }, []);
 
   useEffect(() => {

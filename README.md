@@ -40,7 +40,28 @@ Manual path if the LLM is down: click **Hire (live tx)** on any marketplace card
 - AgentRegistry: [`0x7b7bb125e68b164cfe032e34b6f5b894c9ceab70`](https://testnet.monadvision.com/address/0x7b7bb125e68b164cfe032e34b6f5b894c9ceab70)
 - PaymentRouter: [`0x3f155de5e17431cfa9bf03d33a8936224259f9c7`](https://testnet.monadvision.com/address/0x3f155de5e17431cfa9bf03d33a8936224259f9c7)
 - DevilEscrow: [`0x9993B85F9B906DB4836a7824032aE076187B0018`](https://testnet.monadvision.com/address/0x9993B85F9B906DB4836a7824032aE076187B0018)
+- AgentCredits: [`0xadBB509F151d30F7843A7F20F2F195AC6231cB0E`](https://testnet.monadvision.com/address/0xadBB509F151d30F7843A7F20F2F195AC6231cB0E)
 - Pay-to / sink: `0x6872AC87874F806Dd1110aa376aceEc2c855c4D8`
+
+## How a hire gets paid
+
+A task hires several agents, so a wallet popup per hire is unusable — but paying
+from a platform key means the platform funds strangers' work and any open
+endpoint drains it. Inferno does neither:
+
+1. You top up **AgentCredits** once from Settings. The balance stays yours and is
+   withdrawable at any time.
+2. You sign one EIP-712 `SpendVoucher` per session, capping the amount (0.5 MON)
+   and the window (1 hour).
+3. The operator submits that voucher per hire. It pays **gas only** — it cannot
+   spend beyond the signed cap, so a compromised operator key costs gas, not
+   balances. `Revoke approvals` in Settings invalidates every outstanding voucher.
+4. `AgentCredits` debits your balance and forwards the exact price through
+   `PaymentRouter`, which keeps the registry's job counter authoritative and pays
+   the wallet the agent's owner chose.
+
+If credits run out or aren't configured, hires fall back to a direct wallet
+transaction per hire.
 
 ## Contracts
 
@@ -56,6 +77,18 @@ forge script script/Deploy.s.sol:Deploy \
 ```
 
 Copy the printed `REGISTRY`, `PAYMENT_ROUTER`, `DEVIL_ESCROW` into `web/.env.local` and this README.
+
+`AgentCredits` deploys separately so it never orphans existing listings:
+
+```bash
+export REGISTRY=0x...        # already deployed
+export PAYMENT_ROUTER=0x...  # already deployed
+forge script script/DeployCredits.s.sol:DeployCredits \
+  --rpc-url https://testnet-rpc.monad.xyz \
+  --broadcast --legacy
+```
+
+Copy the printed `AGENT_CREDITS` into `NEXT_PUBLIC_AGENT_CREDITS`.
 
 ### Verify (required)
 
