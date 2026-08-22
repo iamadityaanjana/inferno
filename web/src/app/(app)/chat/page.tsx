@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useAccount, usePublicClient, useWriteContract } from "wagmi";
 import { ArrowUpIcon } from "@/components/icons";
+import { Markdown } from "@/components/Markdown";
 import type { PlanStep } from "@/app/api/orchestrate/route";
 import { useCatalog } from "@/lib/catalog";
 import { payAgent } from "@/lib/client-pay";
@@ -285,9 +286,7 @@ export default function ChatPage() {
                     ))}
                   </ol>
                 )}
-                {msg.content && (
-                  <p className="text-[14.5px] leading-7 whitespace-pre-wrap text-[#1c1c1a]">{msg.content}</p>
-                )}
+                {msg.content && <Markdown>{msg.content}</Markdown>}
               </div>
             )}
           </article>

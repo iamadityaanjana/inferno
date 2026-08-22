@@ -21,7 +21,7 @@ export async function POST(req: Request) {
     // The hired agents already searched; this call only reconciles their notes,
     // so it runs without web search and just carries their links through.
     const llm = await chatText(
-      "Synthesize a final answer from hired-agent notes and the prior conversation. Stay consistent with what you already told the user. Write plain prose for a chat window: no JSON, no field names, no tables, no code blocks. Weave the agents' numbers into sentences and say what they mean. Where two agents disagree, say so rather than averaging them. Keep any source links the notes carry, listed once at the end. Mention this is not financial advice. Max 220 words.",
+      "Synthesize a final answer from hired-agent notes and the prior conversation. Stay consistent with what you already told the user. Lead with the answer in a sentence or two of prose, then use light Markdown only where it genuinely helps: **bold** for key numbers, a short bullet list when comparing options, and [text](url) for links. Never dump JSON, raw field names, or code blocks. Weave the agents' numbers into sentences and say what they mean. Where two agents disagree, say so rather than averaging them. Keep any source links the notes carry, listed once at the end. Mention this is not financial advice. Max 220 words.",
       `Conversation so far:\n${formatChatHistory(history)}\n\nCurrent task: ${body.task}\n\n${packed}`,
       [],
       420,
