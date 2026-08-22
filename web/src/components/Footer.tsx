@@ -21,6 +21,9 @@ export function Footer() {
           <Link href="/devil" className="hover:text-[#111827]">
             Devil Mode
           </Link>
+          <Link href="/transparency" className="hover:text-[#111827]">
+            Transparency
+          </Link>
         </nav>
       </div>
     </footer>

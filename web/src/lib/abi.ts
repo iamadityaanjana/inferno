@@ -22,6 +22,20 @@ export const registryAbi = [
   },
   {
     type: "function",
+    name: "router",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "address" }],
+  },
+  {
+    type: "function",
+    name: "owner",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "address" }],
+  },
+  {
+    type: "function",
     name: "getAgent",
     stateMutability: "view",
     inputs: [{ name: "id", type: "uint256" }],

@@ -12,6 +12,7 @@ import {
   GridIcon,
   MenuIcon,
   PlugIcon,
+  ShieldIcon,
   type IconComponent,
 } from "@/components/icons";
 
@@ -24,7 +25,10 @@ const NAV: NavItem[] = [
   { href: "/devil", label: "Devil Mode", icon: FlameIcon },
 ];
 
-const FOOTER_NAV: NavItem[] = [{ href: "/settings", label: "Settings", icon: GearIcon }];
+const FOOTER_NAV: NavItem[] = [
+  { href: "/transparency", label: "Transparency", icon: ShieldIcon },
+  { href: "/settings", label: "Settings", icon: GearIcon },
+];
 
 function Logo() {
   return (

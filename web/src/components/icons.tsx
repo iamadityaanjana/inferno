@@ -34,6 +34,15 @@ export function ChatIcon(p: Props) {
   );
 }
 
+export function ShieldIcon(p: Props) {
+  return (
+    <Svg {...p}>
+      <path d="M12 3.2 5 6v5.4c0 4 2.9 7.6 7 9.4 4.1-1.8 7-5.4 7-9.4V6l-7-2.8Z" />
+      <path d="m9.2 12.2 2 2 3.6-3.9" />
+    </Svg>
+  );
+}
+
 export function GridIcon(p: Props) {
   return (
     <Svg {...p}>
