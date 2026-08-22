@@ -1,26 +1,33 @@
 @import "tailwindcss";
 
 :root {
-  --bg: #0a0404;
-  --ink: #f4e6d4;
-  --muted: #b08978;
-  --ember: #ff3b1f;
-  --gold: #ffb020;
-  --line: #3a1a14;
+  --soot: #0c0908;
+  --ash: #1a1410;
+  --cinder: #2b1d16;
+  --bone: #f2e6d4;
+  --ember: #c23b22;
+  --brass: #c9a36b;
+  --smoke: #9a8070;
 }
 
 html,
 body {
-  background: var(--bg);
-  color: var(--ink);
+  background: var(--soot);
+  color: var(--bone);
   min-height: 100%;
 }
 
 body {
-  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
   background-image:
-    radial-gradient(1200px 500px at 50% -10%, rgba(255, 59, 31, 0.22), transparent 55%),
-    radial-gradient(800px 400px at 100% 100%, rgba(255, 176, 32, 0.08), transparent 50%);
+    radial-gradient(900px 420px at 10% -10%, rgba(194, 59, 34, 0.16), transparent 50%),
+    linear-gradient(180deg, #120e0c 0%, #0c0908 40%);
+}
+
+h1,
+h2,
+.display {
+  font-family: var(--font-display), ui-serif, Georgia, serif;
 }
 
 a {
@@ -28,10 +35,22 @@ a {
 }
 
 button:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
 .mono {
   font-family: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+:focus-visible {
+  outline: 2px solid var(--brass);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
 }

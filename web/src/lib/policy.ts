@@ -55,13 +55,13 @@ export function addDailySpend(mon: number) {
 
 export function checkPolicy(policy: Policy, stepCostMon: number, taskTotalMon: number) {
   if (taskTotalMon > policy.maxPerTaskMon) {
-    return { ok: false as const, reason: `Task total ${taskTotalMon.toFixed(3)} MON exceeds max ${policy.maxPerTaskMon} MON` };
+    return { ok: false as const, reason: `This task would spend ${taskTotalMon.toFixed(3)} MON. Cap is ${policy.maxPerTaskMon} MON.` };
   }
   if (loadDailySpend() + taskTotalMon > policy.maxDailyMon) {
-    return { ok: false as const, reason: `Daily cap ${policy.maxDailyMon} MON would be exceeded` };
+    return { ok: false as const, reason: `Daily cap ${policy.maxDailyMon} MON would be exceeded.` };
   }
   return {
     ok: true as const,
-    needsApproval: stepCostMon > policy.requireApprovalAboveMon || taskTotalMon > policy.requireApprovalAboveMon,
+    autoPay: stepCostMon <= policy.requireApprovalAboveMon && taskTotalMon <= policy.requireApprovalAboveMon,
   };
 }

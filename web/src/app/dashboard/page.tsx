@@ -1,16 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { formatEther } from "viem";
 import { monadTestnet } from "wagmi/chains";
 import { useAccount, useBalance, usePublicClient, useReadContract, useReadContracts, useWriteContract } from "wagmi";
 import { ConnectButton } from "@/components/ConnectButton";
-import { Feed } from "@/components/Feed";
 import { paymentRouterAbi, registryAbi } from "@/lib/abi";
-import { type Activity, pushActivity } from "@/lib/activity";
-import { PAY_GAS, PAYMENT_ROUTER, REGISTRY, contractsReady } from "@/lib/contracts";
-import { mon } from "@/lib/format";
+import { PAY_GAS, PAYMENT_ROUTER, PAY_TO, REGISTRY, contractsReady, explorerAddress, explorerTx } from "@/lib/contracts";
+import { mon, shortAddr, shortHash } from "@/lib/format";
 import { addDailySpend, checkPolicy, defaultPolicy, loadPolicy, savePolicy, type Policy } from "@/lib/policy";
 import type { PlanStep } from "@/app/api/orchestrate/route";
 
@@ -23,25 +21,49 @@ type AgentView = {
   active: boolean;
 };
 
+type Step = {
+  id: string;
+  label: string;
+  status: "running" | "done" | "error";
+  hash?: `0x${string}`;
+  mon?: number;
+  to?: string;
+};
+
+type ChatMsg = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  steps?: Step[];
+};
+
+type AgentWallet = { enabled: boolean; address?: string; balance?: string; autoCapMon?: string };
+
 export default function DashboardPage() {
   const { address, isConnected, chainId } = useAccount();
   const publicClient = usePublicClient();
   const { writeContractAsync } = useWriteContract();
-  const { data: bal } = useBalance({ address, chainId: monadTestnet.id, query: { enabled: Boolean(address) } });
+  const { data: userBal } = useBalance({ address, chainId: monadTestnet.id, query: { enabled: Boolean(address) } });
 
   const [policy, setPolicy] = useState<Policy | null>(null);
   const [draft, setDraft] = useState<Policy>(defaultPolicy);
-  const [task, setTask] = useState("Research the best Monad DeFi opportunity for 5 MON.");
+  const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [answer, setAnswer] = useState<string | null>(null);
-  const [feed, setFeed] = useState<Activity[]>([]);
-  const [spent, setSpent] = useState(0);
-  const [txCount, setTxCount] = useState(0);
+  const [messages, setMessages] = useState<ChatMsg[]>([]);
+  const [agentWallet, setAgentWallet] = useState<AgentWallet>({ enabled: false });
+  const scroller = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setPolicy(loadPolicy());
+    fetch("/api/pay")
+      .then((r) => r.json())
+      .then((d: AgentWallet) => setAgentWallet(d))
+      .catch(() => setAgentWallet({ enabled: false }));
   }, []);
+
+  useEffect(() => {
+    scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" });
+  }, [messages, busy]);
 
   const { data: count } = useReadContract({
     address: REGISTRY,
@@ -68,20 +90,42 @@ export default function DashboardPage() {
   const agents: AgentView[] = (agentReads ?? []).flatMap((row, i) => {
     if (row.status !== "success" || !row.result) return [];
     const a = row.result;
-    return [
-      {
-        id: agentIds[i],
-        name: a.name,
-        capabilities: a.capabilities,
-        priceWei: a.priceWei,
-        jobs: a.jobs,
-        active: a.active,
-      },
-    ];
+    return [{ id: agentIds[i], name: a.name, capabilities: a.capabilities, priceWei: a.priceWei, jobs: a.jobs, active: a.active }];
   });
 
-  async function payAgent(agentId: number, priceWei: bigint, label: string) {
-    if (!publicClient) throw new Error("No public client");
+  function patchAssistant(asstId: string, patch: Partial<ChatMsg> | ((m: ChatMsg) => ChatMsg)) {
+    setMessages((prev) =>
+      prev.map((m) => {
+        if (m.id !== asstId) return m;
+        return typeof patch === "function" ? patch(m) : { ...m, ...patch };
+      }),
+    );
+  }
+
+  function upsertStep(asstId: string, step: Step) {
+    patchAssistant(asstId, (m) => {
+      const steps = [...(m.steps ?? [])];
+      const i = steps.findIndex((s) => s.id === step.id);
+      if (i >= 0) steps[i] = step;
+      else steps.push(step);
+      return { ...m, steps };
+    });
+  }
+
+  async function payAgent(agentId: number, priceWei: bigint, label: string, auto: boolean) {
+    const cost = mon(priceWei);
+    if (auto && agentWallet.enabled) {
+      const res = await fetch("/api/pay", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agentId, priceWei: priceWei.toString() }),
+      });
+      const data = (await res.json()) as { hash?: `0x${string}`; error?: string };
+      if (!res.ok || !data.hash) throw new Error(data.error ?? "Agent pay failed");
+      addDailySpend(cost);
+      return data.hash;
+    }
+    if (!publicClient) throw new Error("Connect a wallet to sign this hire");
     if (chainId !== monadTestnet.id) throw new Error("Switch to Monad Testnet");
     const hash = await writeContractAsync({
       address: PAYMENT_ROUTER,
@@ -94,41 +138,20 @@ export default function DashboardPage() {
     });
     const receipt = await publicClient.waitForTransactionReceipt({ hash });
     if (receipt.status !== "success") throw new Error("Payment reverted");
-    const cost = mon(priceWei);
-    setSpent((s) => s + cost);
-    setTxCount((n) => n + 1);
     addDailySpend(cost);
-    setFeed((f) => pushActivity(f, `Hired ${label}`, { hash, mon: cost }));
     return hash;
   }
 
-  async function hireOne(agent: AgentView) {
+  async function runTask(task: string) {
     if (!policy) return;
-    setError(null);
-    const cost = mon(agent.priceWei);
-    const gate = checkPolicy(policy, cost, cost);
-    if (!gate.ok) {
-      setError(gate.reason);
-      return;
-    }
-    if (gate.needsApproval && !confirm(`Approve ${cost} MON hire of ${agent.name}?`)) return;
+    const userId = `u-${Date.now()}`;
+    const asstId = `a-${Date.now()}`;
+    setMessages((m) => [
+      ...m,
+      { id: userId, role: "user", content: task },
+      { id: asstId, role: "assistant", content: "", steps: [{ id: "plan", label: "Breaking down the task", status: "running" }] },
+    ]);
     setBusy(true);
-    try {
-      await payAgent(agent.id, agent.priceWei, agent.name);
-      await refetchAgents();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "pay failed");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function runTask() {
-    if (!policy) return;
-    setError(null);
-    setAnswer(null);
-    setBusy(true);
-    setFeed((f) => pushActivity(f, `${policy.name} received task`));
     try {
       const res = await fetch("/api/orchestrate", {
         method: "POST",
@@ -141,185 +164,263 @@ export default function DashboardPage() {
       const total = plan.steps.reduce((s, step) => s + mon(BigInt(step.priceWei)), 0);
       const gate = checkPolicy(policy, total, total);
       if (!gate.ok) throw new Error(gate.reason);
-      if (gate.needsApproval && !confirm(`Approve task spend ${total} MON?`)) throw new Error("Rejected");
 
-      setFeed((f) => pushActivity(f, `Discovered ${plan.steps!.length} services`));
+      upsertStep(asstId, {
+        id: "plan",
+        label: `Hiring ${plan.steps.length} specialists · ${total.toFixed(3)} MON`,
+        status: "done",
+      });
 
       const results: { agentId: number; result: string; txHash: string }[] = [];
       for (const step of plan.steps) {
         const agent = agents.find((a) => a.id === step.agentId);
         const name = agent?.name ?? `Agent ${step.agentId}`;
         const price = agent?.priceWei ?? BigInt(step.priceWei);
-        const hash = await payAgent(step.agentId, price, name);
+        const stepId = `hire-${step.agentId}`;
+        upsertStep(asstId, {
+          id: stepId,
+          label: `${name} · ${mon(price)} MON`,
+          status: "running",
+          mon: mon(price),
+          to: PAY_TO,
+        });
+        const hash = await payAgent(step.agentId, price, name, gate.autoPay);
+        upsertStep(asstId, {
+          id: stepId,
+          label: `Paid ${name} · ${mon(price)} MON → sink`,
+          status: "done",
+          hash,
+          mon: mon(price),
+          to: PAY_TO,
+        });
         const run = await fetch(`/api/agents/${step.agentId}/run`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ txHash: hash, task }),
         });
         const payload = (await run.json()) as { result?: string; error?: string };
-        if (!run.ok) throw new Error(payload.error ?? "agent refused unpaid work");
+        if (!run.ok) throw new Error(payload.error ?? "Hire not confirmed on-chain");
         results.push({ agentId: step.agentId, result: payload.result ?? "", txHash: hash });
-        setFeed((f) => pushActivity(f, `${name} completed task`));
       }
 
+      upsertStep(asstId, { id: "syn", label: "Writing the answer", status: "running" });
       const syn = await fetch("/api/synthesize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ task, results }),
       });
       const done = (await syn.json()) as { answer?: string };
-      setAnswer(done.answer ?? "");
-      setFeed((f) => pushActivity(f, "Final answer generated"));
+      upsertStep(asstId, { id: "syn", label: "Answer ready", status: "done" });
+      patchAssistant(asstId, { content: done.answer ?? "" });
       await refetchAgents();
+      fetch("/api/pay")
+        .then((r) => r.json())
+        .then((d: AgentWallet) => setAgentWallet(d))
+        .catch(() => undefined);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "run failed");
+      const reason = e instanceof Error ? e.message : "Failed";
+      patchAssistant(asstId, (m) => ({
+        ...m,
+        content: reason,
+        steps: (m.steps ?? []).map((s) => (s.status === "running" ? { ...s, status: "error" as const } : s)),
+      }));
     } finally {
       setBusy(false);
     }
   }
 
+  function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const task = input.trim();
+    if (!task || busy || !policy) return;
+    setInput("");
+    void runTask(task);
+  }
+
+  const sink = PAY_TO;
+  const agentBal = agentWallet.balance ? Number(formatEther(BigInt(agentWallet.balance))) : null;
+
   return (
-    <main className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-6 py-8">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <Link href="/" className="text-xl font-semibold tracking-tight">
-            INFERNO
-          </Link>
-          <p className="text-xs text-[#b08978]">Agent economy · live MON payments</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <Link href="/devil" className="text-sm text-[#ffb020]">
-            Devil Mode
+    <div className="flex min-h-screen flex-col lg:flex-row">
+      <aside className="flex w-full shrink-0 flex-col gap-6 border-b border-[#2b1d16] bg-[#1a1410] px-5 py-5 lg:w-80 lg:border-b-0 lg:border-r">
+        <div className="flex items-center justify-between">
+          <Link href="/" className="display text-2xl">
+            Inferno
           </Link>
           <ConnectButton />
         </div>
-      </header>
 
-      {!contractsReady() && (
-        <p className="rounded-md border border-[#ff3b1f] px-3 py-2 text-sm">
-          Contracts not configured. Copy <span className="mono">web/.env.example</span> →{" "}
-          <span className="mono">web/.env.local</span> after deploy.
-        </p>
-      )}
+        <section className="space-y-2 text-sm">
+          <p className="text-[11px] tracking-[0.18em] text-[#c9a36b]">MONEY</p>
+          <p className="leading-6 text-[#9a8070]">
+            Hires go through PaymentRouter and land in the marketplace sink. The router keeps nothing.
+          </p>
+          <a className="mono block text-xs text-[#c9a36b] underline" href={explorerAddress(sink)} target="_blank" rel="noreferrer">
+            Sink {shortAddr(sink || "0x")}
+          </a>
+          {agentWallet.enabled && agentWallet.address && (
+            <p className="text-xs text-[#9a8070]">
+              Agent pays from{" "}
+              <a className="mono underline" href={explorerAddress(agentWallet.address)} target="_blank" rel="noreferrer">
+                {shortAddr(agentWallet.address)}
+              </a>
+              {agentBal != null && <> · {agentBal.toFixed(3)} MON</>}
+              . Auto under {policy?.requireApprovalAboveMon ?? 0.5} MON / task.
+            </p>
+          )}
+          {isConnected && userBal && (
+            <p className="text-xs text-[#9a8070]">
+              Connected wallet {Number(formatEther(userBal.value)).toFixed(3)} MON
+              {sink && address?.toLowerCase() !== sink.toLowerCase() && (
+                <> — this is not the sink. Look at the sink address, not this wallet.</>
+              )}
+            </p>
+          )}
+        </section>
 
-      {!policy ? (
-        <section className="rounded-xl border border-[#3a1a14] p-5">
-          <h2 className="mb-3 font-semibold">Create agent</h2>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="text-sm">
+        {!policy ? (
+          <section className="space-y-3">
+            <p className="text-[11px] tracking-[0.18em] text-[#c9a36b]">CREATE AGENT</p>
+            <label className="block text-xs text-[#9a8070]">
               Name
               <input
-                className="mt-1 w-full rounded-md border border-[#3a1a14] bg-black/40 px-3 py-2"
+                className="mt-1 w-full rounded-sm border border-[#2b1d16] bg-[#0c0908] px-3 py-2 text-sm text-[#f2e6d4]"
                 value={draft.name}
                 onChange={(e) => setDraft({ ...draft, name: e.target.value })}
               />
             </label>
-            <label className="text-sm">
-              Max spend / task (MON)
+            <label className="block text-xs text-[#9a8070]">
+              Auto-pay up to (MON)
               <input
                 type="number"
                 step="0.01"
-                className="mt-1 w-full rounded-md border border-[#3a1a14] bg-black/40 px-3 py-2"
-                value={draft.maxPerTaskMon}
-                onChange={(e) => setDraft({ ...draft, maxPerTaskMon: Number(e.target.value) })}
-              />
-            </label>
-            <label className="text-sm">
-              Max daily spend (MON)
-              <input
-                type="number"
-                step="0.01"
-                className="mt-1 w-full rounded-md border border-[#3a1a14] bg-black/40 px-3 py-2"
-                value={draft.maxDailyMon}
-                onChange={(e) => setDraft({ ...draft, maxDailyMon: Number(e.target.value) })}
-              />
-            </label>
-            <label className="text-sm">
-              Require approval above (MON)
-              <input
-                type="number"
-                step="0.01"
-                className="mt-1 w-full rounded-md border border-[#3a1a14] bg-black/40 px-3 py-2"
+                className="mt-1 w-full rounded-sm border border-[#2b1d16] bg-[#0c0908] px-3 py-2 text-sm text-[#f2e6d4]"
                 value={draft.requireApprovalAboveMon}
                 onChange={(e) => setDraft({ ...draft, requireApprovalAboveMon: Number(e.target.value) })}
               />
             </label>
-          </div>
-          <button
-            className="mt-4 rounded-md bg-[#ff3b1f] px-4 py-2 text-sm font-semibold"
-            onClick={() => {
-              savePolicy(draft);
-              setPolicy(draft);
-            }}
-          >
-            Save agent
-          </button>
-        </section>
-      ) : (
-        <section className="grid gap-3 sm:grid-cols-4">
-          {[
-            ["Balance", bal ? `${Number(formatEther(bal.value)).toFixed(4)} MON` : "—"],
-            ["Spent", `${spent.toFixed(3)} MON`],
-            ["Earned", "0.00 MON"],
-            ["Transactions", String(txCount)],
-          ].map(([k, v]) => (
-            <div key={k} className="rounded-xl border border-[#3a1a14] bg-black/30 p-4">
-              <div className="text-xs text-[#b08978]">{k}</div>
-              <div className="mono text-lg">{v}</div>
-            </div>
-          ))}
-          <p className="sm:col-span-4 text-xs text-[#b08978]">
-            {policy.name} · max {policy.maxPerTaskMon} MON / task · approval above {policy.requireApprovalAboveMon} MON
+            <label className="block text-xs text-[#9a8070]">
+              Max / task
+              <input
+                type="number"
+                step="0.01"
+                className="mt-1 w-full rounded-sm border border-[#2b1d16] bg-[#0c0908] px-3 py-2 text-sm text-[#f2e6d4]"
+                value={draft.maxPerTaskMon}
+                onChange={(e) => setDraft({ ...draft, maxPerTaskMon: Number(e.target.value) })}
+              />
+            </label>
+            <button
+              className="w-full rounded-sm bg-[#c23b22] px-3 py-2 text-sm font-medium"
+              onClick={() => {
+                savePolicy(draft);
+                setPolicy(draft);
+              }}
+            >
+              Save
+            </button>
+          </section>
+        ) : (
+          <p className="text-xs text-[#9a8070]">
+            {policy.name} · auto ≤ {policy.requireApprovalAboveMon} MON · hard cap {policy.maxPerTaskMon} MON
           </p>
+        )}
+
+        <section>
+          <p className="mb-2 text-[11px] tracking-[0.18em] text-[#c9a36b]">MARKETPLACE</p>
+          <ul className="space-y-2">
+            {agents.map((agent) => (
+              <li key={agent.id} className="border-t border-[#2b1d16] pt-2">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-sm">{agent.name}</span>
+                  <span className="mono text-xs text-[#c9a36b]">{mon(agent.priceWei)} MON</span>
+                </div>
+                <p className="text-[11px] text-[#9a8070]">{agent.jobs.toString()} jobs</p>
+              </li>
+            ))}
+          </ul>
         </section>
-      )}
 
-      <section className="rounded-xl border border-[#3a1a14] p-5">
-        <h2 className="mb-2 font-semibold">Task</h2>
-        <textarea
-          className="h-24 w-full rounded-md border border-[#3a1a14] bg-black/40 px-3 py-2 text-sm"
-          value={task}
-          onChange={(e) => setTask(e.target.value)}
-        />
-        <button
-          className="mt-3 rounded-md bg-[#ff3b1f] px-4 py-2 text-sm font-semibold"
-          disabled={!isConnected || !policy || busy || !contractsReady()}
-          onClick={runTask}
-        >
-          {busy ? "Working…" : "Run agent"}
-        </button>
-        {error && <p className="mt-2 text-sm text-[#ff3b1f]">{error}</p>}
-      </section>
+        <Link href="/devil" className="mt-auto text-sm text-[#c9a36b]">
+          Devil Mode →
+        </Link>
+      </aside>
 
-      <section>
-        <h2 className="mb-3 font-semibold">Marketplace</h2>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {agents.map((agent) => (
-            <article key={agent.id} className="rounded-xl border border-[#3a1a14] bg-black/30 p-4">
-              <h3 className="font-semibold">{agent.name}</h3>
-              <p className="mt-1 text-xs text-[#b08978]">{agent.capabilities}</p>
-              <p className="mono mt-3 text-sm">{mon(agent.priceWei)} MON / task</p>
-              <p className="text-xs text-[#b08978]">{agent.jobs.toString()} jobs on-chain</p>
-              <button
-                className="mt-3 w-full rounded-md border border-[#ff3b1f] px-3 py-1.5 text-sm"
-                disabled={!isConnected || busy || !policy}
-                onClick={() => hireOne(agent)}
-              >
-                Hire (live tx)
-              </button>
+      <main className="flex min-h-[70vh] flex-1 flex-col bg-[#f2e6d4] text-[#1a1410]">
+        <div ref={scroller} className="flex-1 space-y-6 overflow-y-auto px-4 py-6 sm:px-8">
+          {messages.length === 0 && (
+            <div className="mx-auto max-w-xl pt-16">
+              <h1 className="display text-4xl text-[#1a1410]">Ask the agent.</h1>
+              <p className="mt-3 text-[#6b5348]">
+                It will pick specialists, pay the sink, then answer. Try: research the best Monad DeFi opportunity for 5 MON.
+              </p>
+            </div>
+          )}
+          {messages.map((msg) => (
+            <article key={msg.id} className={`mx-auto w-full max-w-2xl ${msg.role === "user" ? "text-right" : ""}`}>
+              {msg.role === "user" ? (
+                <p className="inline-block rounded-sm bg-[#1a1410] px-4 py-2 text-left text-[#f2e6d4]">{msg.content}</p>
+              ) : (
+                <div className="text-left">
+                  {msg.steps && msg.steps.length > 0 && (
+                    <ol className="mb-3 space-y-1.5 border-l-2 border-[#c23b22] pl-3 text-sm">
+                      {msg.steps.map((step) => (
+                        <li key={step.id} className="text-[#4a3a32]">
+                          <span className="text-[11px] tracking-wide text-[#c23b22]">
+                            {step.status === "running" ? "…" : step.status === "error" ? "×" : "✓"}
+                          </span>{" "}
+                          {step.label}
+                          {step.hash && (
+                            <a className="mono ml-2 text-[11px] text-[#8a5a20] underline" href={explorerTx(step.hash)} target="_blank" rel="noreferrer">
+                              {shortHash(step.hash)}
+                            </a>
+                          )}
+                          {step.to && (
+                            <a className="mono ml-2 text-[11px] text-[#6b5348] underline" href={explorerAddress(step.to)} target="_blank" rel="noreferrer">
+                              to {shortAddr(step.to)}
+                            </a>
+                          )}
+                        </li>
+                      ))}
+                    </ol>
+                  )}
+                  {msg.content && <p className="whitespace-pre-wrap text-[15px] leading-7">{msg.content}</p>}
+                </div>
+              )}
             </article>
           ))}
         </div>
-      </section>
 
-      <Feed items={feed} />
-
-      {answer && (
-        <section className="rounded-xl border border-[#ffb020]/40 bg-black/40 p-5">
-          <h2 className="mb-2 text-sm font-semibold text-[#ffb020]">Final answer</h2>
-          <p className="whitespace-pre-wrap text-sm leading-6">{answer}</p>
-        </section>
-      )}
-    </main>
+        <form onSubmit={onSubmit} className="border-t border-[#d8c4aa] bg-[#ead9c2] px-4 py-4 sm:px-8">
+          <div className="mx-auto flex max-w-2xl items-end gap-2">
+            <textarea
+              rows={2}
+              className="min-h-[48px] flex-1 resize-none rounded-sm border border-[#c9b396] bg-[#f2e6d4] px-3 py-2 text-[#1a1410] placeholder:text-[#9a8070]"
+              placeholder={policy ? "Message the agent…" : "Create an agent in the sidebar first"}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  onSubmit(e);
+                }
+              }}
+              disabled={!policy || busy || !contractsReady()}
+            />
+            <button
+              type="submit"
+              className="rounded-sm bg-[#c23b22] px-4 py-3 text-sm font-medium text-[#f2e6d4]"
+              disabled={!policy || busy || !input.trim() || !contractsReady()}
+            >
+              {busy ? "Working" : "Send"}
+            </button>
+          </div>
+          {!agentWallet.enabled && (
+            <p className="mx-auto mt-2 max-w-2xl text-xs text-[#6b5348]">
+              Add AGENT_PRIVATE_KEY to web/.env so the agent can pay itself under the auto-pay limit.
+            </p>
+          )}
+        </form>
+      </main>
+    </div>
   );
 }

@@ -156,7 +156,7 @@ export default function DevilPage() {
           <Link href="/" className="text-xl font-semibold">
             INFERNO
           </Link>
-          <p className="text-xs text-[#ff3b1f]">DEVIL MODE · live escrow</p>
+          <p className="text-xs text-[#c9a36b]">DEVIL MODE</p>
         </div>
         <div className="flex items-center gap-3">
           <Link href="/dashboard" className="text-sm text-[#b08978]">
@@ -227,8 +227,8 @@ export default function DevilPage() {
       )}
 
       <Feed items={feed} />
-      <p className="text-xs text-[#b08978]">
-        Every accept and resolve is a Monad testnet transaction. Explorer links appear in the feed.
+      <p className="text-xs text-[#9a8070]">
+        Accepted stakes sit in DevilEscrow until resolve. They do not go to your wallet or the hire sink.
       </p>
     </main>
   );

@@ -1,25 +1,32 @@
 import Link from "next/link";
-import { EXPLORER, PAYMENT_ROUTER, REGISTRY, DEVIL_ESCROW } from "@/lib/contracts";
+import { DEVIL_ESCROW, EXPLORER, PAYMENT_ROUTER, PAY_TO, REGISTRY } from "@/lib/contracts";
 
 export default function Home() {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col justify-center gap-10 px-6 py-16">
-      <p className="text-xs tracking-[0.3em] text-[#ff3b1f]">MONAD TESTNET</p>
+      <p className="text-xs tracking-[0.28em] text-[#c9a36b]">MONAD TESTNET</p>
       <div>
-        <h1 className="text-6xl font-semibold tracking-tight sm:text-7xl">INFERNO</h1>
-        <p className="mt-4 max-w-md text-lg text-[#b08978]">
-          Give AI a wallet. Let agents buy information, hire other agents, and settle in MON. Live transactions only.
+        <h1 className="text-6xl leading-none sm:text-8xl">Inferno</h1>
+        <p className="mt-5 max-w-md text-lg text-[#9a8070]">
+          Give an agent a wallet. It hires specialists, pays them in MON, and shows you every step.
         </p>
       </div>
       <div className="flex flex-wrap gap-3">
-        <Link href="/dashboard" className="rounded-md bg-[#ff3b1f] px-5 py-3 text-sm font-semibold text-white">
-          Create agent
+        <Link href="/dashboard" className="rounded-sm bg-[#c23b22] px-5 py-3 text-sm font-medium text-[#f2e6d4]">
+          Open chat
         </Link>
-        <Link href="/devil" className="rounded-md border border-[#ff3b1f] px-5 py-3 text-sm font-semibold text-[#ffb020]">
-          Enter Devil Mode
+        <Link href="/devil" className="rounded-sm border border-[#c23b22] px-5 py-3 text-sm font-medium text-[#c9a36b]">
+          Devil Mode
         </Link>
       </div>
-      <dl className="mono space-y-1 text-[11px] text-[#b08978]">
+      <p className="max-w-lg text-sm leading-6 text-[#9a8070]">
+        Hire fees do not stay in the router. They land in the marketplace sink{" "}
+        <a className="underline decoration-[#c9a36b]/40" href={`${EXPLORER}/address/${PAY_TO}`} target="_blank" rel="noreferrer">
+          {PAY_TO || "PAY_TO"}
+        </a>
+        . Devil stakes sit in escrow until the deal resolves.
+      </p>
+      <dl className="mono space-y-1 text-[11px] text-[#9a8070]">
         <div>
           Registry{" "}
           <a className="underline" href={`${EXPLORER}/address/${REGISTRY}`} target="_blank" rel="noreferrer">
