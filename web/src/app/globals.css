@@ -1,5 +1,13 @@
 @import "tailwindcss";
 
+@font-face {
+  font-family: "Cabinet Grotesk";
+  src: url("/fonts/CabinetGrotesk-Variable.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   --paper: #eef0f5;
   --card: #ffffff;
@@ -9,6 +17,8 @@
   --navy: #1e3a5f;
   --good: #22c55e;
   --link: #2f6fed;
+  /* Sits behind the hero image so the fold never flashes white. */
+  --hero-fallback: #e9e3dd;
 }
 
 html {
@@ -22,25 +32,25 @@ body {
   min-height: 100%;
 }
 
-/* Layered so Tailwind utilities still win. Without this, the browser's own
-   button face shows through in OS dark mode. */
-@layer base {
-  button,
-  input,
-  textarea,
-  select {
-    color: inherit;
-    background-color: transparent;
-  }
-}
-
 body {
   font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+}
+
+.heading {
+  font-family: "Cabinet Grotesk", var(--font-body), ui-sans-serif, sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.03em;
 }
 
 h1,
 .display {
   font-family: var(--font-display), ui-serif, Georgia, serif;
+}
+
+.serif-italic {
+  font-family: var(--font-display), ui-serif, Georgia, serif;
+  font-style: italic;
+  letter-spacing: -0.01em;
 }
 
 a {
@@ -61,9 +71,27 @@ button:disabled {
   outline-offset: 2px;
 }
 
+/* Layered so Tailwind utilities still win. Without this, the browser's own
+   button face shows through in OS dark mode. */
+@layer base {
+  button,
+  input,
+  textarea,
+  select {
+    color: inherit;
+    background-color: transparent;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     animation: none !important;
     transition: none !important;
+  }
+
+  [data-animate],
+  [data-reveal] {
+    opacity: 1 !important;
+    transform: none !important;
   }
 }

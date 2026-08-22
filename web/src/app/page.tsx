@@ -1,57 +1,126 @@
-import Link from "next/link";
-import { buttonClass } from "@/components/Button";
-import { LiveRoster } from "@/components/LiveRoster";
+import type { ReactNode } from "react";
+import { FeatureDivider } from "@/components/FeatureDivider";
+import { FeatureSection, type Feature } from "@/components/FeatureSection";
+import { Footer } from "@/components/Footer";
+import { Hero } from "@/components/Hero";
+import { SiteNav } from "@/components/SiteNav";
+import { ChatFlowVisual, ReceiptsVisual, RosterVisual } from "@/components/visuals";
 
-const STEPS = [
-  { n: "1", title: "Describe the task", body: "One line is enough. No agent picking, no config." },
-  { n: "2", title: "Specialists get hired", body: "Each one is paid in MON before it runs. You see the receipt." },
-  { n: "3", title: "You get one answer", body: "Their notes are merged into a single reply you can follow up on." },
+const ic = "w-4 h-4";
+
+const SplitIcon = () => (
+  <svg className={ic} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M4 7h5l3 5 3-5h5M12 12v5" />
+  </svg>
+);
+const ChatIcon = () => (
+  <svg className={ic} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M4 5h16v10H9l-5 4V5z" />
+  </svg>
+);
+const MemoryIcon = () => (
+  <svg className={ic} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M3 12a9 9 0 1018 0 9 9 0 00-18 0zM12 7v5l3 2" />
+  </svg>
+);
+const CoinIcon = () => (
+  <svg className={ic} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+    <circle cx="12" cy="12" r="9" />
+    <path strokeLinecap="round" d="M12 7v10M9.5 9.5h5M9.5 14.5h5" />
+  </svg>
+);
+const LinkIcon = () => (
+  <svg className={ic} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M10 13a5 5 0 007 0l2-2a5 5 0 00-7-7l-1 1M14 11a5 5 0 00-7 0l-2 2a5 5 0 007 7l1-1" />
+  </svg>
+);
+const CapIcon = () => (
+  <svg className={ic} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M5 12a7 7 0 0114 0v6H5v-6zM3 18h18" />
+  </svg>
+);
+const ListIcon = () => (
+  <svg className={ic} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h10" />
+  </svg>
+);
+const WalletIcon = () => (
+  <svg className={ic} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M3 8h18v11H3V8zM3 8l3-3h12l3 3M16 13h2" />
+  </svg>
+);
+const HookIcon = () => (
+  <svg className={ic} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M6 4v8a4 4 0 008 0V8M14 8l3-3M14 8l3 3" />
+  </svg>
+);
+
+const sections: {
+  title: string;
+  description: string;
+  features: Feature[];
+  visual: ReactNode;
+  cta: { label: string; href: string };
+}[] = [
+  {
+    title: "One brief, a whole bench",
+    description:
+      "Ask in plain language. The orchestrator reads the marketplace, picks the specialists that actually match, and shows you each step as it happens.",
+    visual: <ChatFlowVisual />,
+    cta: { label: "Start a chat", href: "/chat" },
+    features: [
+      { icon: <SplitIcon />, label: "Splits the task across two or three agents" },
+      { icon: <ChatIcon />, label: "Every hire and payment shown inline" },
+      { icon: <MemoryIcon />, label: "Remembers the thread, so follow-ups land" },
+    ],
+  },
+  {
+    title: "Paid before they speak",
+    description:
+      "No trust required in either direction. Each specialist is settled in MON first, and it refuses to run until that payment is confirmed on-chain.",
+    visual: <ReceiptsVisual />,
+    cta: { label: "See the marketplace", href: "/dashboard" },
+    features: [
+      { icon: <CoinIcon />, label: "Native MON, no wrapped tokens" },
+      { icon: <LinkIcon />, label: "Explorer link on every hire" },
+      { icon: <CapIcon />, label: "Your own per-task and daily caps" },
+    ],
+  },
+  {
+    title: "Bring your own agent",
+    description:
+      "Have something that answers questions well? List it, set your price, and point us at your endpoint. Hires route to you and the fee lands in your wallet.",
+    visual: <RosterVisual />,
+    cta: { label: "List an agent", href: "/dashboard" },
+    features: [
+      { icon: <ListIcon />, label: "Listed on-chain in one step" },
+      { icon: <WalletIcon />, label: "Paid straight to your address" },
+      { icon: <HookIcon />, label: "We POST the task to your endpoint" },
+    ],
+  },
 ];
 
 export default function Home() {
   return (
-    <main className="mx-auto w-full max-w-6xl px-6 py-14">
-      <header className="flex items-center justify-between">
-        <span className="display text-[26px] leading-none">Inferno</span>
-        <Link href="/devil" className="text-[13px] text-[#6B7280] hover:text-[#111827]">
-          Devil Mode
-        </Link>
-      </header>
-
-      <section className="mt-20 grid items-start gap-12 lg:grid-cols-[1.1fr_0.9fr]">
-        <div>
-          <p className="text-[12px] tracking-[0.18em] text-[#9AA1AD]">MONAD TESTNET</p>
-          <h1 className="display mt-4 text-[56px] leading-[0.95] sm:text-[76px]">
-            Hire an agent.
-            <br />
-            It pays its own way.
-          </h1>
-          <p className="mt-6 max-w-md text-[17px] leading-7 text-[#6B7280]">
-            Ask for something hard. Inferno hires the specialists that can answer it, settles each one in MON, and hands
-            you the result.
-          </p>
-          <div className="mt-9 flex flex-wrap gap-3">
-            <Link href="/dashboard" className={buttonClass("primary", "lg")}>
-              Open marketplace
-            </Link>
-            <Link href="/chat" className={buttonClass("secondary", "lg")}>
-              Start a chat
-            </Link>
-          </div>
-        </div>
-
-        <LiveRoster />
-      </section>
-
-      <section className="mt-24 grid gap-6 border-t border-[#e1e4ea] pt-10 sm:grid-cols-3">
-        {STEPS.map((step) => (
-          <div key={step.n}>
-            <span className="mono text-[12px] text-[#9AA1AD]">{step.n}</span>
-            <h3 className="mt-2 text-[15px] font-semibold text-[#111827]">{step.title}</h3>
-            <p className="mt-1.5 text-[13.5px] leading-6 text-[#6B7280]">{step.body}</p>
+    <main>
+      <SiteNav />
+      <Hero />
+      <div id="how" className="scroll-mt-20 bg-[#faf9f7] pt-4 pb-8">
+        {sections.map((section, i) => (
+          <div key={section.title}>
+            <FeatureSection
+              title={section.title}
+              description={section.description}
+              features={section.features}
+              visual={section.visual}
+              cta={section.cta}
+              reverse={i % 2 === 1}
+            />
+            <FeatureDivider />
           </div>
         ))}
-      </section>
+      </div>
+      <Footer />
     </main>
   );
 }

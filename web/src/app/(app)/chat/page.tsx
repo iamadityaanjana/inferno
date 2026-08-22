@@ -2,8 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useAccount, usePublicClient, useWriteContract } from "wagmi";
-import { AppNav } from "@/components/AppNav";
-import { buttonClass } from "@/components/Button";
+import { ArrowUpIcon } from "@/components/icons";
 import type { PlanStep } from "@/app/api/orchestrate/route";
 import { useCatalog } from "@/lib/catalog";
 import { payAgent } from "@/lib/client-pay";
@@ -15,6 +14,12 @@ import { getSessionId, historyFrom, loadChat, saveChat, type SavedChatMsg } from
 
 type Step = NonNullable<SavedChatMsg["steps"]>[number];
 type ChatMsg = SavedChatMsg;
+
+const OPENERS = [
+  "Compare the top three lending pools on Monad and flag the riskiest one.",
+  "What shipped on Monad this week that matters to a DeFi builder?",
+  "Research whether stMON is safe to use as collateral right now.",
+];
 
 export default function ChatPage() {
   const { chainId } = useAccount();
@@ -95,7 +100,12 @@ export default function ChatPage() {
     setMessages((m) => [
       ...m,
       userMsg,
-      { id: asstId, role: "assistant", content: "", steps: [{ id: "plan", label: "Breaking down the task", status: "running" }] },
+      {
+        id: asstId,
+        role: "assistant",
+        content: "",
+        steps: [{ id: "plan", label: "Breaking down the task", status: "running" }],
+      },
     ]);
     setBusy(true);
     try {
@@ -172,9 +182,7 @@ export default function ChatPage() {
     }
   }
 
-  function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const task = input.trim();
+  function submit(task: string) {
     if (!task || busy) return;
     setInput("");
     void runTask(task);
@@ -190,74 +198,139 @@ export default function ChatPage() {
     void runTask(task);
   });
 
+  const empty = messages.length === 0;
+
   return (
-    <div className="flex min-h-screen flex-col bg-[#eef0f5]">
-      <div className="border-b border-[#e5e7eb] bg-white/80 px-5 py-4">
-        <AppNav current="chat" />
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex items-center justify-between gap-3 border-b border-[#eeeeea] px-4 py-3 sm:px-5">
+        <div>
+          <h1 className="heading text-[16px] leading-tight text-[#1c1c1a]">Chat</h1>
+          <p className="text-[12px] text-[#8a8a82]">
+            {agents.length > 0 ? `${agents.length} agents on the bench` : "Loading the bench…"}
+          </p>
+        </div>
+        {messages.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setMessages([])}
+            className="rounded-lg px-2.5 py-1 text-[12px] font-medium text-[#8a8a82] transition-colors hover:bg-[#f4f4f1] hover:text-[#1c1c1a]"
+          >
+            Clear
+          </button>
+        )}
       </div>
 
-      <div ref={scroller} className="flex-1 space-y-6 overflow-y-auto px-4 py-6 sm:px-8">
-        {messages.length === 0 && (
-          <div className="mx-auto max-w-xl pt-16">
-            <h1 className="display text-4xl">Ask anything.</h1>
-            <p className="mt-3 text-[#5a6170]">The chat hires marketplace agents and answers here.</p>
+      <div ref={scroller} className="min-h-0 flex-1 space-y-6 overflow-y-auto px-4 py-6 sm:px-5">
+        {empty && (
+          <div className="mx-auto max-w-xl pt-10 sm:pt-20">
+            <h2 className="heading text-[30px] leading-tight text-[#1c1c1a]">What do you need answered?</h2>
+            <p className="mt-2 text-[14px] leading-6 text-[#8a8a82]">
+              Describe the task. Inferno picks the specialists, pays them in MON, and writes the answer here.
+            </p>
+            <div className="mt-6 flex flex-col gap-2">
+              {OPENERS.map((opener) => (
+                <button
+                  key={opener}
+                  type="button"
+                  onClick={() => submit(opener)}
+                  disabled={busy || !contractsReady()}
+                  className="rounded-xl border border-[#e6e6e2] bg-white px-3.5 py-2.5 text-left text-[13px] leading-5 text-[#55554f] transition-colors hover:border-[#d4d4d0] hover:bg-[#fafaf8] hover:text-[#1c1c1a] disabled:opacity-50"
+                >
+                  {opener}
+                </button>
+              ))}
+            </div>
           </div>
         )}
+
         {messages.map((msg) => (
-          <article key={msg.id} className={`mx-auto w-full max-w-2xl ${msg.role === "user" ? "text-right" : ""}`}>
+          <article key={msg.id} className="mx-auto w-full max-w-2xl">
             {msg.role === "user" ? (
-              <p className="inline-block rounded-2xl bg-[#14161c] px-4 py-2 text-left text-white">{msg.content}</p>
+              <div className="flex justify-end">
+                <p className="max-w-[85%] rounded-2xl bg-[#1c1c1a] px-3.5 py-2 text-[14px] leading-6 text-white">
+                  {msg.content}
+                </p>
+              </div>
             ) : (
-              <div className="text-left">
+              <div>
                 {msg.steps && msg.steps.length > 0 && (
-                  <ol className="mb-3 space-y-1.5 border-l-2 border-[#1E3A5F] pl-3 text-sm">
+                  <ol className="mb-3 space-y-1.5 rounded-xl border border-[#eeeeea] bg-[#fafaf8] p-3 text-[12.5px]">
                     {msg.steps.map((step) => (
-                      <li key={step.id}>
-                        <span className="text-[11px] tracking-wide text-[#1E3A5F]">
-                          {step.status === "running" ? "…" : step.status === "error" ? "×" : "✓"}
-                        </span>{" "}
-                        {step.label}
-                        {step.hash && (
-                          <a className="mono ml-2 text-[11px] text-[#1f4b99] underline" href={explorerTx(step.hash)} target="_blank" rel="noreferrer">
-                            {shortHash(step.hash)}
-                          </a>
-                        )}
+                      <li key={step.id} className="flex items-start gap-2">
+                        <span
+                          className={
+                            step.status === "error"
+                              ? "text-[#c0392b]"
+                              : step.status === "running"
+                                ? "text-[#8a8a82]"
+                                : "text-[#1f8a6a]"
+                          }
+                        >
+                          {step.status === "running" ? "○" : step.status === "error" ? "×" : "✓"}
+                        </span>
+                        <span className="text-[#55554f]">
+                          {step.label}
+                          {step.hash && (
+                            <a
+                              className="mono ml-2 text-[11px] text-[#8a8a82] underline decoration-[#d4d4d0] hover:text-[#1c1c1a]"
+                              href={explorerTx(step.hash)}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              {shortHash(step.hash)}
+                            </a>
+                          )}
+                        </span>
                       </li>
                     ))}
                   </ol>
                 )}
-                {msg.content && <p className="whitespace-pre-wrap text-[15px] leading-7">{msg.content}</p>}
+                {msg.content && (
+                  <p className="text-[14.5px] leading-7 whitespace-pre-wrap text-[#1c1c1a]">{msg.content}</p>
+                )}
               </div>
             )}
           </article>
         ))}
       </div>
 
-      <form onSubmit={onSubmit} className="border-t border-[#e2e5ec] bg-white px-4 py-4 sm:px-8">
-        <div className="mx-auto flex max-w-2xl items-end gap-2">
-          <textarea
-            rows={2}
-            className="min-h-[48px] flex-1 resize-none rounded-2xl border border-[#e5e7eb] bg-[#eef0f5] px-3 py-2 text-[#111827] placeholder:text-[#9AA1AD]"
-            placeholder="Message…"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                onSubmit(e);
-              }
-            }}
-            disabled={busy || !contractsReady()}
-          />
-          <button
-            type="submit"
-            className={buttonClass("primary", "lg")}
-            disabled={busy || !input.trim() || !contractsReady()}
-          >
-            {busy ? "Working" : "Send"}
-          </button>
-        </div>
-      </form>
+      <div className="border-t border-[#eeeeea] px-4 py-3 sm:px-5">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            submit(input.trim());
+          }}
+          className="mx-auto max-w-2xl"
+        >
+          <div className="flex items-end gap-2 rounded-2xl border border-[#e6e6e2] bg-white p-2 transition-colors focus-within:border-[#c9c9c2]">
+            <textarea
+              rows={1}
+              className="max-h-40 min-h-8 flex-1 resize-none bg-transparent px-2 py-1 text-[14px] leading-6 text-[#1c1c1a] outline-none placeholder:text-[#a3a39b]"
+              placeholder={contractsReady() ? "Ask anything…" : "Contracts not configured"}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  submit(input.trim());
+                }
+              }}
+              disabled={busy || !contractsReady()}
+            />
+            <button
+              type="submit"
+              aria-label="Send"
+              className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[#1c1c1a] text-white transition-colors hover:bg-[#33332f] disabled:cursor-not-allowed disabled:opacity-40"
+              disabled={busy || !input.trim() || !contractsReady()}
+            >
+              <ArrowUpIcon className="h-4 w-4" />
+            </button>
+          </div>
+          <p className="mt-2 px-1 text-[11.5px] text-[#a3a39b]">
+            {busy ? "Hiring specialists…" : "Every hire is paid in MON and shown with an explorer link."}
+          </p>
+        </form>
+      </div>
     </div>
   );
 }

@@ -1,4 +1,3 @@
-import { buttonClass } from "./Button";
 import { explorerTx } from "@/lib/contracts";
 import { mon, shortHash } from "@/lib/format";
 import type { AgentView } from "@/lib/catalog";
@@ -10,29 +9,37 @@ export type TileState = {
   result?: string;
 };
 
-const MARKS: Record<string, { bg: string; fg: string; glyph: string }> = {
-  "Web Research": { bg: "#E8F1FF", fg: "#2F6FED", glyph: "W" },
-  "DeFi Agent": { bg: "#FFF1E4", fg: "#E67A1A", glyph: "D" },
-  "News Agent": { bg: "#FFF6D6", fg: "#C49212", glyph: "N" },
-  "Risk Agent": { bg: "#FFE8E6", fg: "#D6453D", glyph: "R" },
-  "General Research": { bg: "#E8F7F2", fg: "#1F8A6A", glyph: "G" },
+const MARKS: Record<string, { bg: string; fg: string }> = {
+  "Web Research": { bg: "#E8F1FF", fg: "#2F6FED" },
+  "DeFi Agent": { bg: "#FFF1E4", fg: "#E67A1A" },
+  "News Agent": { bg: "#FFF6D6", fg: "#C49212" },
+  "Risk Agent": { bg: "#FFE8E6", fg: "#D6453D" },
+  "General Research": { bg: "#E8F7F2", fg: "#1F8A6A" },
 };
 
+const FALLBACK = [
+  { bg: "#EEE9FF", fg: "#5B4BDB" },
+  { bg: "#E8F4FF", fg: "#2A7DE1" },
+  { bg: "#F1F1EE", fg: "#55554F" },
+];
+
 function markFor(name: string) {
-  if (MARKS[name]) return MARKS[name];
-  const palette = [
-    { bg: "#EEE9FF", fg: "#5B4BDB", glyph: name.slice(0, 1).toUpperCase() },
-    { bg: "#E8F4FF", fg: "#2A7DE1", glyph: name.slice(0, 1).toUpperCase() },
-    { bg: "#F3F4F6", fg: "#374151", glyph: name.slice(0, 1).toUpperCase() },
-  ];
-  return palette[name.length % palette.length];
+  const tone = MARKS[name] ?? FALLBACK[name.length % FALLBACK.length];
+  return { ...tone, glyph: name.slice(0, 1).toUpperCase() };
 }
 
 function Verified() {
   return (
-    <svg viewBox="0 0 16 16" className="h-4 w-4 shrink-0" aria-label="Verified">
-      <circle cx="8" cy="8" r="8" fill="#22C55E" />
-      <path d="M4.6 8.15 6.9 10.4 11.4 5.7" fill="none" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+    <svg viewBox="0 0 16 16" className="h-3.5 w-3.5 shrink-0" aria-label="Verified">
+      <circle cx="8" cy="8" r="8" fill="#1F8A6A" />
+      <path
+        d="M4.6 8.15 6.9 10.4 11.4 5.7"
+        fill="none"
+        stroke="#fff"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
@@ -53,10 +60,10 @@ export function AgentCard({
   const running = state?.status === "running";
 
   return (
-    <article className="flex min-h-[220px] flex-col rounded-[22px] bg-white p-6 shadow-[0_8px_28px_rgba(28,36,51,0.06)]">
+    <article className="flex flex-col rounded-xl border border-[#e6e6e2] bg-white p-4 transition-colors hover:border-[#d4d4d0]">
       <div className="flex items-start justify-between gap-3">
         <div
-          className="flex h-12 w-12 items-center justify-center rounded-[14px] text-lg font-medium"
+          className="flex size-10 items-center justify-center rounded-lg text-[15px] font-semibold"
           style={{ background: mark.bg, color: mark.fg }}
         >
           {mark.glyph}
@@ -65,32 +72,41 @@ export function AgentCard({
           type="button"
           disabled={disabled || running}
           onClick={onHire}
-          className={hired ? buttonClass("outline", "sm") : buttonClass("ghost", "sm")}
+          className={
+            hired
+              ? "inline-flex h-8 items-center rounded-lg border border-[#e6e6e2] bg-white px-3 text-[13px] font-medium text-[#8a8a82]"
+              : "inline-flex h-8 items-center rounded-lg bg-[#1c1c1a] px-3 text-[13px] font-semibold text-white transition-colors hover:bg-[#33332f] disabled:cursor-not-allowed disabled:opacity-50"
+          }
         >
           {running ? (state?.label ?? "Hiring…") : hired ? "Hired" : "Hire"}
         </button>
       </div>
 
-      <div className="mt-5 flex items-center gap-1.5">
-        <h2 className="text-[17px] font-semibold tracking-tight text-[#111827]">{agent.name}</h2>
+      <div className="mt-4 flex items-center gap-1.5">
+        <h2 className="text-[14.5px] font-semibold tracking-[-0.01em] text-[#1c1c1a]">{agent.name}</h2>
         <Verified />
       </div>
-      <p className="mt-1 text-[13px] text-[#9AA1AD]">
-        by Inferno
-        <span className="mx-1.5 text-[#D1D5DB]">·</span>
-        {mon(agent.priceWei)} MON
+      <p className="mt-0.5 text-[12px] text-[#a3a39b]">
+        {mon(agent.priceWei)} MON per hire
+        <span className="mx-1.5">·</span>
+        {agent.jobs.toString()} jobs
       </p>
-      <p className="mt-3 line-clamp-2 text-[13.5px] leading-6 text-[#6B7280]">{agent.capabilities}</p>
+      <p className="mt-2.5 line-clamp-2 text-[13px] leading-5 text-[#8a8a82]">{agent.capabilities}</p>
 
       {(state?.hash || state?.result) && (
-        <div className="mt-auto pt-4 text-[12px] leading-5">
+        <div className="mt-3 border-t border-[#eeeeea] pt-3 text-[12px] leading-5">
           {state.hash && (
-            <a className="text-[#2F6FED] underline" href={explorerTx(state.hash)} target="_blank" rel="noreferrer">
+            <a
+              className="mono text-[11px] text-[#8a8a82] underline decoration-[#d4d4d0] hover:text-[#1c1c1a]"
+              href={explorerTx(state.hash)}
+              target="_blank"
+              rel="noreferrer"
+            >
               {shortHash(state.hash)}
             </a>
           )}
           {state.result && (
-            <p className={`mt-1 line-clamp-3 ${state.status === "error" ? "text-[#D6453D]" : "text-[#374151]"}`}>
+            <p className={`mt-1 line-clamp-3 ${state.status === "error" ? "text-[#c0392b]" : "text-[#55554f]"}`}>
               {state.result}
             </p>
           )}
