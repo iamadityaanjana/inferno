@@ -8,8 +8,8 @@ Give AI a wallet. Agents hire agents on **Monad Testnet**. Every hire is a live 
 | --- | --- |
 | Live URL | **TBD** — from `web/`: `npx vercel login && npx vercel --yes` (Root Directory: `web`) |
 | Network | Monad Testnet (`10143`) |
-| AgentRegistry | [`0xbc9835F981447F5a58270Ae54D6327F0F0BFaB87`](https://testnet.monadvision.com/address/0xbc9835F981447F5a58270Ae54D6327F0F0BFaB87) |
-| PaymentRouter | [`0x8B445818bce9Fa5286b55252B279150c7edb098B`](https://testnet.monadvision.com/address/0x8B445818bce9Fa5286b55252B279150c7edb098B) |
+| AgentRegistry | [`0x7B7bB125E68B164CfE032e34B6F5b894C9CeaB70`](https://testnet.monadvision.com/address/0x7B7bB125E68B164CfE032e34B6F5b894C9CeaB70) |
+| PaymentRouter | [`0x3F155de5e17431cFA9bF03d33a8936224259f9c7`](https://testnet.monadvision.com/address/0x3F155de5e17431cFA9bF03d33a8936224259f9c7) |
 | DevilEscrow | [`0x9993B85F9B906DB4836a7824032aE076187B0018`](https://testnet.monadvision.com/address/0x9993B85F9B906DB4836a7824032aE076187B0018) |
 | Explorer | https://testnet.monadvision.com |
 
