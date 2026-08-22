@@ -83,10 +83,17 @@ async function complete(
   }
 }
 
-export async function chatJson(system: string, user: string, history: LlmMessage[] = []) {
+export async function chatJson(
+  system: string,
+  user: string,
+  history: LlmMessage[] = [],
+  maxTokens = 400,
+  temperature?: number,
+) {
   const out = await complete([{ role: "system", content: system }, ...history, { role: "user", content: user }], {
     json: true,
-    maxTokens: 400,
+    maxTokens,
+    temperature,
   });
   return out?.text ?? null;
 }

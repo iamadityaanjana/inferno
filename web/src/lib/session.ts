@@ -56,7 +56,10 @@ export function loadDevil(): DevilSession | null {
   try {
     const raw = localStorage.getItem(DEVIL_KEY);
     if (!raw) return null;
-    return JSON.parse(raw) as DevilSession;
+    const saved = JSON.parse(raw) as Partial<DevilSession> & { id: string };
+    // Sessions stored before a field existed would otherwise read as undefined
+    // despite the type claiming otherwise.
+    return { ...emptyDevil(saved.id), ...saved };
   } catch {
     return null;
   }
@@ -75,6 +78,8 @@ export function emptyDevil(id: string): DevilSession {
     deal: null,
     dealId: null,
     line: "Connect. Then we'll talk.",
+    hint: null,
+    plan: null,
     turns: [],
     rounds: [],
   };

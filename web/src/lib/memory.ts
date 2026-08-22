@@ -19,7 +19,27 @@ export type DevilRound = {
   stake?: string;
 };
 
-export type DevilDeal = { id: number; name: string; stake: string; blurb: string };
+export type DevilDeal = { id: number; name: string; stake: string; blurb: string; title?: string };
+
+/**
+ * One rung of an LLM-generated run. `kind` indexes DevilEscrow.DealType, so the
+ * payout maths is never the model's to choose — only the shape of the run is.
+ */
+export type DevilPlanRound = {
+  round: number;
+  kind: 0 | 1 | 2;
+  stake: string;
+  title: string;
+};
+
+export type DevilHintRound = { round: number; name: string; stake: string; blurb: string };
+
+/**
+ * What an INFO deal buys. The next round's terms alone would be worthless — the
+ * deal blurb states them anyway — so it leaks the road ahead instead, which is
+ * the only way to see whether the ladder is worth climbing.
+ */
+export type DevilHint = { rounds: DevilHintRound[] };
 
 export type DevilSession = {
   id: string;
@@ -29,6 +49,9 @@ export type DevilSession = {
   deal: DevilDeal | null;
   dealId: string | null;
   line: string;
+  hint: DevilHint | null;
+  /** The run's rungs, generated once and then kept so a leak cannot lie. */
+  plan: DevilPlanRound[] | null;
   turns: DevilTurn[];
   rounds: DevilRound[];
 };
@@ -57,6 +80,8 @@ export function rememberDevil(sessionId: string, incoming: Partial<DevilSession>
     deal: incoming.deal ?? prev?.deal ?? null,
     dealId: incoming.dealId ?? prev?.dealId ?? null,
     line: incoming.line ?? prev?.line ?? "",
+    hint: incoming.hint ?? prev?.hint ?? null,
+    plan: incoming.plan ?? prev?.plan ?? null,
     turns: (incoming.turns ?? prev?.turns ?? []).slice(-30),
     rounds: (incoming.rounds ?? prev?.rounds ?? []).slice(-20),
   };

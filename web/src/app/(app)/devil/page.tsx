@@ -10,15 +10,14 @@ import { devilEscrowAbi } from "@/lib/abi";
 import { type Activity, pushActivity } from "@/lib/activity";
 import { DEVIL_ESCROW, ESCROW_GAS, contractsReady } from "@/lib/contracts";
 import { readApiJson } from "@/lib/http";
-import type { DevilDeal, DevilSession } from "@/lib/memory";
+import type { DevilDeal, DevilHint, DevilPlanRound, DevilSession } from "@/lib/memory";
 import { emptyDevil, getSessionId, loadDevil, saveDevil } from "@/lib/session";
-import { BTN_PRIMARY, BTN_SECONDARY, CARD } from "@/lib/ui";
+import { BTN_PRIMARY, BTN_SECONDARY, CARD, INPUT } from "@/lib/ui";
 
-const CHALLENGES = [
-  { name: "Guess", prompt: "Pick 1–5", options: [1, 2, 3, 4, 5] },
-  { name: "Higher / Lower", prompt: "Next number vs 5", options: [1, 2], labels: ["Lower", "Higher"] },
-  { name: "Risk Door", prompt: "Pick a door", options: [1, 2, 3], labels: ["Left", "Center", "Right"] },
-] as const;
+/** Deal kind ids, matching DevilEscrow.DealType. */
+const GUARANTEED = 0;
+const RISKY = 1;
+const INFO = 2;
 
 export default function DevilPage() {
   const { isConnected, chainId, address } = useAccount();
@@ -53,11 +52,11 @@ export default function DevilPage() {
     if (el) el.scrollTop = el.scrollHeight;
   }, [game?.turns.length, thinking]);
 
-  const challenge = CHALLENGES[((game?.round ?? 1) - 1) % CHALLENGES.length];
   const balanceMon = bal ? Number(formatEther(bal.value)) : 0;
   const dealId = game?.dealId ? BigInt(game.dealId) : null;
+  const [luckyNumber, setLuckyNumber] = useState("7");
 
-  async function loadLine(snapshot?: DevilSession) {
+  async function loadLine(snapshot?: DevilSession, opts: { mode?: "deal" | "hint"; round?: number } = {}) {
     const current = snapshot ?? game;
     if (!current) return;
     setThinking(true);
@@ -69,13 +68,21 @@ export default function DevilPage() {
           sessionId: current.id,
           balanceMon,
           last: current.last,
-          round: current.round,
+          round: opts.round ?? current.round,
           lives: current.lives,
+          mode: opts.mode ?? "deal",
+          plan: current.plan,
           turns: current.turns,
           rounds: current.rounds,
         }),
       });
-      const data = await readApiJson<{ line: string; deal: DevilDeal; error?: string }>(res);
+      const data = await readApiJson<{
+        line: string;
+        deal?: DevilDeal;
+        hint?: DevilHint;
+        plan?: DevilPlanRound[];
+        error?: string;
+      }>(res);
       if (!res.ok) throw new Error(data.error ?? "Devil is silent");
       setGame((g) => {
         const base = snapshot ?? g;
@@ -83,7 +90,9 @@ export default function DevilPage() {
         return {
           ...base,
           line: data.line,
-          deal: data.deal,
+          ...(data.deal ? { deal: data.deal } : {}),
+          ...(data.hint ? { hint: data.hint } : {}),
+          ...(data.plan ? { plan: data.plan } : {}),
           turns: [...base.turns, { role: "devil", content: data.line, at: Date.now() }],
         };
       });
@@ -160,6 +169,7 @@ export default function DevilPage() {
 
   async function resolve(guess: number) {
     if (dealId == null || !publicClient || !game) return;
+    const kind = game.deal?.id ?? GUARANTEED;
     setBusy(true);
     setError(null);
     try {
@@ -212,12 +222,28 @@ export default function DevilPage() {
       };
       setGame(next);
       await refetch();
-      await loadLine(next);
+      // An INFO deal's whole product is the leak, so resolving it has to deliver
+      // one. Ask about the round just finished, since the API leaks from there.
+      if (kind === INFO) await loadLine(next, { mode: "hint", round: game.round });
+      else await loadLine(next);
     } catch (e) {
       setError(e instanceof Error ? e.message : "resolve failed");
     } finally {
       setBusy(false);
     }
+  }
+
+  /** Throws the run away so the next deal comes from a freshly composed one. */
+  function newRun() {
+    if (!game) return;
+    const fresh: DevilSession = {
+      ...emptyDevil(game.id),
+      turns: [{ role: "player", content: "Deal me a new gauntlet", at: Date.now() }],
+    };
+    setGame(fresh);
+    setFeed([]);
+    setError(null);
+    say(fresh);
   }
 
   function reject() {
@@ -242,7 +268,20 @@ export default function DevilPage() {
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 p-4 sm:p-5">
-      <PageHeader title="Devil Mode" description="Take the deal or walk. Your stake sits in escrow until it resolves." />
+      <PageHeader
+        title="Devil Mode"
+        description="Ten rounds, composed fresh every run. Take the deal or walk — your stake sits in escrow until it resolves."
+        action={
+          <button
+            type="button"
+            className={BTN_SECONDARY}
+            disabled={busy || thinking || !isConnected}
+            onClick={newRun}
+          >
+            {thinking && !game.deal ? "Dealing…" : "New run"}
+          </button>
+        }
+      />
 
       <div className="grid grid-cols-3 gap-3">
         <Stat label="Round" value={`${game.round} / 10`} />
@@ -282,36 +321,131 @@ export default function DevilPage() {
       </section>
 
       {game.deal && dealId == null && (
-        <div className="flex gap-2">
-          <button
-            className={BTN_PRIMARY}
-            disabled={!isConnected || busy || thinking || !contractsReady()}
-            onClick={() => void accept()}
-          >
-            {busy ? "Signing…" : `Accept ${game.deal.stake} MON`}
-          </button>
-          <button className={BTN_SECONDARY} disabled={busy || thinking} onClick={reject}>
-            Reject
-          </button>
-        </div>
+        <section className={`${CARD} p-4`}>
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="text-[13.5px] font-semibold text-[#1c1c1a]">
+              Round {game.round} · {game.deal.title ?? game.deal.name}
+              {game.deal.title && (
+                <span className="ml-2 rounded-md bg-[#f4f4f1] px-1.5 py-0.5 text-[10.5px] font-medium text-[#55554f]">
+                  {game.deal.name}
+                </span>
+              )}
+            </h2>
+            <span className="mono text-[12px] text-[#8a8a82]">stake {game.deal.stake} MON</span>
+          </div>
+          <p className="mt-1 text-[12.5px] leading-5 text-[#55554f]">{game.deal.blurb}</p>
+          <p className="mt-1.5 text-[12px] leading-5 text-[#a3a39b]">
+            {game.deal.id === GUARANTEED &&
+              "Accepting locks your stake in escrow, then you claim it back with interest. No guessing involved."}
+            {game.deal.id === RISKY &&
+              "Accepting locks your stake in escrow, then you pick a number and roll. Losing costs a life."}
+            {game.deal.id === INFO &&
+              "Accepting locks your stake in escrow and you do not get it back. You get the next three rounds' terms instead."}
+          </p>
+          <div className="mt-3 flex gap-2">
+            <button
+              className={BTN_PRIMARY}
+              disabled={!isConnected || busy || thinking || !contractsReady()}
+              onClick={() => void accept()}
+            >
+              {busy ? "Signing…" : `Accept · ${game.deal.stake} MON`}
+            </button>
+            <button className={BTN_SECONDARY} disabled={busy || thinking} onClick={reject}>
+              Walk away
+            </button>
+          </div>
+        </section>
       )}
 
-      {dealId != null && (
+      {dealId != null && game.deal && (
         <section className={`${CARD} p-4`}>
-          <h2 className="text-[13.5px] font-semibold text-[#1c1c1a]">{challenge.name}</h2>
-          <p className="mt-0.5 text-[12.5px] text-[#8a8a82]">{challenge.prompt}</p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {challenge.options.map((opt, i) => (
-              <button
-                key={opt}
-                className={BTN_SECONDARY}
-                disabled={busy || thinking}
-                onClick={() => void resolve(opt)}
-              >
-                {"labels" in challenge ? challenge.labels[i] : String(opt)}
+          {game.deal.id === GUARANTEED && (
+            <>
+              <h2 className="text-[13.5px] font-semibold text-[#1c1c1a]">Collect your winnings</h2>
+              <p className="mt-0.5 text-[12.5px] leading-5 text-[#8a8a82]">
+                Nothing to guess — a GUARANTEED deal always pays. Your {game.deal.stake} MON is in escrow; claiming
+                returns {mon14(game.deal.stake)} MON.
+              </p>
+              <button className={`${BTN_PRIMARY} mt-3`} disabled={busy || thinking} onClick={() => void resolve(0)}>
+                {busy ? "Signing…" : `Claim ${mon14(game.deal.stake)} MON`}
               </button>
-            ))}
+            </>
+          )}
+
+          {game.deal.id === RISKY && (
+            <>
+              <h2 className="text-[13.5px] font-semibold text-[#1c1c1a]">Pick your number, then roll</h2>
+              <p className="mt-0.5 text-[12.5px] leading-5 text-[#8a8a82]">
+                Enter any number from 1 to 99. It is mixed into the on-chain roll, so no two numbers give the same
+                result — but every number carries the same odds: <strong className="text-[#55554f]">60% you win</strong>{" "}
+                {mon3(game.deal.stake)} MON, 40% the house keeps your {game.deal.stake} MON.
+              </p>
+              <div className="mt-3 flex flex-wrap items-end gap-2">
+                <label className="w-28">
+                  <span className="text-[11.5px] text-[#a3a39b]">Your number (1–99)</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="99"
+                    className={`${INPUT} mt-1`}
+                    value={luckyNumber}
+                    onChange={(e) => setLuckyNumber(e.target.value)}
+                  />
+                </label>
+                <button
+                  className={BTN_PRIMARY}
+                  disabled={busy || thinking || !validNumber(luckyNumber)}
+                  onClick={() => void resolve(Number(luckyNumber))}
+                >
+                  {busy ? "Rolling…" : `Roll with ${validNumber(luckyNumber) ? luckyNumber : "…"}`}
+                </button>
+              </div>
+              {!validNumber(luckyNumber) && (
+                <p className="mt-2 text-[12px] text-[#c0392b]">Enter a whole number between 1 and 99.</p>
+              )}
+            </>
+          )}
+
+          {game.deal.id === INFO && (
+            <>
+              <h2 className="text-[13.5px] font-semibold text-[#1c1c1a]">Collect what you paid for</h2>
+              <p className="mt-0.5 text-[12.5px] leading-5 text-[#8a8a82]">
+                No guess and no payout — your {game.deal.stake} MON stays with the house. What you get back is the next
+                three rounds&apos; terms, so you can decide whether the climb is worth it.
+              </p>
+              <button className={`${BTN_PRIMARY} mt-3`} disabled={busy || thinking} onClick={() => void resolve(0)}>
+                {busy ? "Signing…" : "Collect the leak"}
+              </button>
+            </>
+          )}
+        </section>
+      )}
+
+      {game.hint && game.hint.rounds.length > 0 && (
+        <section className={`${CARD} p-4`}>
+          <div className="flex items-baseline justify-between gap-2">
+            <h2 className="text-[13.5px] font-semibold text-[#1c1c1a]">The road ahead</h2>
+            <span className="text-[11px] tracking-wide text-[#a3a39b]">BOUGHT WITH AN INFO DEAL</span>
           </div>
+          <ul className="mt-2.5 flex flex-col gap-1.5">
+            {game.hint.rounds.map((r) => (
+              <li
+                key={r.round}
+                className={`flex flex-wrap items-baseline gap-x-2 rounded-lg px-2.5 py-1.5 text-[12.5px] ${
+                  r.round === game.round ? "bg-[#f4f4f1] text-[#1c1c1a]" : "text-[#55554f]"
+                }`}
+              >
+                <span className="mono text-[11.5px] text-[#a3a39b]">R{r.round}</span>
+                <span className="font-semibold">{r.name}</span>
+                <span className="text-[#8a8a82]">{r.blurb}</span>
+                {r.round === game.round && (
+                  <span className="rounded-md bg-[#1c1c1a] px-1.5 py-0.5 text-[10.5px] font-medium text-white">
+                    now
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 
@@ -320,6 +454,21 @@ export default function DevilPage() {
       <Feed items={feed} />
     </div>
   );
+}
+
+/** Payout previews, mirroring DevilEscrow.resolve so the UI cannot overpromise. */
+function mon14(stake: string) {
+  return String(Number((Number(stake) * 1.4).toFixed(4)));
+}
+
+function mon3(stake: string) {
+  return String(Number((Number(stake) * 3).toFixed(4)));
+}
+
+/** The contract takes a uint8, so the roll seed has to stay inside one byte. */
+function validNumber(raw: string) {
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 1 && n <= 99;
 }
 
 /** Three pulsing dots under a DEVIL label, so the wait reads as him deciding. */
