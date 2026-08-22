@@ -209,6 +209,8 @@ export const agentCreditsAbi = [
     inputs: [{ name: "user", type: "address" }],
     outputs: [{ type: "uint256" }],
   },
+  { type: "function", name: "operator", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
+  { type: "function", name: "owner", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
   {
     type: "function",
     name: "remaining",
