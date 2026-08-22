@@ -213,7 +213,7 @@ export default function ChatPage() {
           <button
             type="button"
             onClick={() => setMessages([])}
-            className="rounded-lg px-2.5 py-1 text-[12px] font-medium text-[#8a8a82] transition-colors hover:bg-[#f4f4f1] hover:text-[#1c1c1a]"
+            className="rounded-lg px-2.5 py-1 text-[12px] font-medium text-[#5f5f59] transition-colors hover:bg-[#f4f4f1] hover:text-[#1c1c1a]"
           >
             Clear
           </button>

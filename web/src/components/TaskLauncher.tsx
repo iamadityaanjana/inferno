@@ -48,7 +48,7 @@ export function TaskLauncher() {
           />
           <button
             onClick={() => launch(task)}
-            className="inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-[#1E3A5F] px-4 py-2.5 text-sm font-medium text-white transition-all hover:bg-[#16304f] active:scale-95 sm:w-auto sm:py-2"
+            className="inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-[#1c1c1a] px-4 py-2.5 text-sm font-medium text-white transition-all hover:bg-[#33332f] active:scale-95 sm:w-auto sm:py-2"
           >
             <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h13M13 6l6 6-6 6" />

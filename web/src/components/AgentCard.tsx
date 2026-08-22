@@ -74,7 +74,7 @@ export function AgentCard({
           onClick={onHire}
           className={
             hired
-              ? "inline-flex h-8 items-center rounded-lg border border-[#e6e6e2] bg-white px-3 text-[13px] font-medium text-[#8a8a82]"
+              ? "inline-flex h-8 items-center rounded-lg border border-[#e6e6e2] bg-white px-3 text-[13px] font-medium text-[#5f5f59]"
               : "inline-flex h-8 items-center rounded-lg bg-[#1c1c1a] px-3 text-[13px] font-semibold text-white transition-colors hover:bg-[#33332f] disabled:cursor-not-allowed disabled:opacity-50"
           }
         >

@@ -12,13 +12,13 @@ const STEPS = [
 export function ChatFlowVisual() {
   return (
     <div className="flex h-full flex-col justify-center gap-3 p-6">
-      <div className="ml-auto max-w-[75%] rounded-2xl bg-[#1E3A5F] px-4 py-2.5 text-[13px] text-white">
+      <div className="ml-auto max-w-[75%] rounded-2xl bg-[#1c1c1a] px-4 py-2.5 text-[13px] text-white">
         Where can I earn yield on Monad right now?
       </div>
-      <ol className="mt-1 space-y-2 border-l-2 border-[#1E3A5F] pl-3">
+      <ol className="mt-1 space-y-2 border-l-2 border-[#c9c9c2] pl-3">
         {STEPS.map((step) => (
           <li key={step.label} className="flex items-baseline gap-2 text-[12.5px] text-[#374151]">
-            <span className="text-[#1E3A5F]">✓</span>
+            <span className="text-[#1f8a6a]">✓</span>
             {step.label}
             <span className="mono text-[11px] text-[#9AA1AD]">{step.note}</span>
           </li>

@@ -19,9 +19,10 @@ export const BTN_PRIMARY =
 export const BTN_SECONDARY =
   "inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-[#e6e6e2] bg-white px-3 text-[13px] font-medium text-[#55554f] transition-colors hover:bg-[#fafaf8] disabled:cursor-not-allowed disabled:opacity-50";
 
-/** Borderless tertiary action. */
+/** Borderless tertiary action. Darker than the reference's #8a8a82, which only
+ *  cleared 3:1 against white. */
 export const BTN_GHOST =
-  "inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-2.5 text-[13px] font-medium text-[#8a8a82] transition-colors hover:bg-[#f4f4f1] hover:text-[#1c1c1a] disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-2.5 text-[13px] font-medium text-[#5f5f59] transition-colors hover:bg-[#f4f4f1] hover:text-[#1c1c1a] disabled:cursor-not-allowed disabled:opacity-50";
 
 /** Card surface inside the page panel. */
 export const CARD = "rounded-xl border border-[#e6e6e2] bg-white";
