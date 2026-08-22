@@ -29,10 +29,19 @@ contract Deploy is Script {
         registry.register("Risk Agent", "Risk scoring and downside analysis", 0.03 ether, payout);
         registry.register("General Research", "Generic research fallback", 0.02 ether, payout);
 
-        DevilEscrow escrow = new DevilEscrow();
-        if (house > 0) {
-            (bool ok,) = address(escrow).call{value: house}("");
-            require(ok, "house fund");
+        // A new registry forces a new router, because PaymentRouter.registry is
+        // immutable. The escrow is independent, so point at the existing one to
+        // keep its house balance instead of stranding it.
+        address reuse = vm.envOr("REUSE_DEVIL_ESCROW", address(0));
+        DevilEscrow escrow;
+        if (reuse != address(0)) {
+            escrow = DevilEscrow(payable(reuse));
+        } else {
+            escrow = new DevilEscrow();
+            if (house > 0) {
+                (bool ok,) = address(escrow).call{value: house}("");
+                require(ok, "house fund");
+            }
         }
 
         vm.stopBroadcast();

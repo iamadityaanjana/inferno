@@ -37,8 +37,8 @@ Manual path if the LLM is down: click **Hire (live tx)** on any marketplace card
 
 ## Deployed addresses (testnet)
 
-- AgentRegistry: [`0xbc9835F981447F5a58270Ae54D6327F0F0BFaB87`](https://testnet.monadvision.com/address/0xbc9835F981447F5a58270Ae54D6327F0F0BFaB87)
-- PaymentRouter: [`0x8B445818bce9Fa5286b55252B279150c7edb098B`](https://testnet.monadvision.com/address/0x8B445818bce9Fa5286b55252B279150c7edb098B)
+- AgentRegistry: [`0x7b7bb125e68b164cfe032e34b6f5b894c9ceab70`](https://testnet.monadvision.com/address/0x7b7bb125e68b164cfe032e34b6f5b894c9ceab70)
+- PaymentRouter: [`0x3f155de5e17431cfa9bf03d33a8936224259f9c7`](https://testnet.monadvision.com/address/0x3f155de5e17431cfa9bf03d33a8936224259f9c7)
 - DevilEscrow: [`0x9993B85F9B906DB4836a7824032aE076187B0018`](https://testnet.monadvision.com/address/0x9993B85F9B906DB4836a7824032aE076187B0018)
 - Pay-to / sink: `0x6872AC87874F806Dd1110aa376aceEc2c855c4D8`
 
