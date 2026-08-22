@@ -94,7 +94,7 @@ export function Sidebar() {
       <div className="flex flex-col gap-2 pt-2">
         <NavLinks items={FOOTER_NAV} pathname={pathname} onNavigate={onNavigate} />
         <div className="px-1">
-          <ConnectButton />
+          <ConnectButton layout="rail" />
         </div>
       </div>
     </>

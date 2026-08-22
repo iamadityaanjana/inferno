@@ -6,7 +6,7 @@ import { buttonClass } from "./Button";
 
 const LINKS = [
   { label: "How it works", href: "#how" },
-  { label: "Marketplace", href: "/dashboard" },
+  { label: "Marketplace", href: "/marketplace" },
   { label: "Devil Mode", href: "/devil" },
 ];
 
@@ -51,7 +51,7 @@ export function SiteNav() {
             <Link href="/chat" className={buttonClass("secondary")}>
               Open chat
             </Link>
-            <Link href="/dashboard" className={`hidden md:inline-flex ${buttonClass("primary")}`}>
+            <Link href="/marketplace" className={`hidden md:inline-flex ${buttonClass("primary")}`}>
               Browse agents
             </Link>
 

@@ -1,16 +1,19 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useAccount, usePublicClient, useWriteContract } from "wagmi";
 import { AgentCard, type TileState } from "@/components/AgentCard";
-import { AppNav } from "@/components/AppNav";
-import { ListAgent } from "@/components/ListAgent";
+import { EmptyState } from "@/components/app/EmptyState";
+import { PageHeader } from "@/components/app/PageHeader";
+import { GridIcon } from "@/components/icons";
 import { type AgentView, useCatalog } from "@/lib/catalog";
 import { payAgent } from "@/lib/client-pay";
 import { contractsReady } from "@/lib/contracts";
 import { mon } from "@/lib/format";
 import { readApiJson } from "@/lib/http";
 import { checkPolicy, loadPolicy } from "@/lib/policy";
+import { BTN_PRIMARY, BTN_SECONDARY } from "@/lib/ui";
 
 export default function MarketplacePage() {
   const { chainId } = useAccount();
@@ -20,6 +23,7 @@ export default function MarketplacePage() {
   const [busyId, setBusyId] = useState<number | null>(null);
   const [states, setStates] = useState<Record<number, TileState>>({});
   const [autoPay, setAutoPay] = useState(false);
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
     loadPolicy();
@@ -72,21 +76,61 @@ export default function MarketplacePage() {
     }
   }
 
+  const needle = query.trim().toLowerCase();
+  const visible = needle
+    ? agents.filter(
+        (a) => a.name.toLowerCase().includes(needle) || a.capabilities.toLowerCase().includes(needle),
+      )
+    : agents;
+
   return (
-    <div className="min-h-screen bg-[#eef0f5]">
-      <div className="mx-auto w-full max-w-6xl px-6 py-7">
-        <AppNav current="market" />
+    <div className="flex flex-col gap-4 p-4 sm:p-5">
+      <PageHeader
+        title="Explore marketplace"
+        description="Every agent listed on-chain. Hire one directly, or let the chat assemble a bench for you."
+        action={
+          <Link href="/chat" className={BTN_PRIMARY}>
+            Open chat
+          </Link>
+        }
+      />
 
-        <div className="mt-12 mb-8 flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <p className="text-[13px] text-[#9AA1AD]">Marketplace</p>
-            <h1 className="display mt-1 text-[42px] leading-none">Agents & APIs</h1>
-          </div>
-          <ListAgent onListed={() => void refetch()} />
-        </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search by name or capability…"
+          className="w-full max-w-xs rounded-lg border border-[#e6e6e2] bg-white px-3 py-1.5 text-[13px] text-[#1c1c1a] outline-none transition placeholder:text-[#a3a39b] hover:border-[#d4d4d0] focus:border-[#c9c9c2]"
+        />
+        <span className="text-[12px] text-[#a3a39b]">
+          {visible.length} of {agents.length}
+        </span>
+      </div>
 
-        <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
-          {agents.map((agent) => (
+      {agents.length === 0 ? (
+        <EmptyState
+          icon={GridIcon}
+          title={contractsReady() ? "No agents listed yet" : "Contracts not configured"}
+          description={
+            contractsReady()
+              ? "The registry is empty. List the first agent and it shows up here for everyone."
+              : "Set the registry and router addresses in your environment, then reload."
+          }
+          action={
+            <Link href="/agents" className={BTN_SECONDARY}>
+              List an agent
+            </Link>
+          }
+        />
+      ) : visible.length === 0 ? (
+        <EmptyState
+          icon={GridIcon}
+          title="Nothing matches that"
+          description="Try a broader term, or clear the search to see the whole roster."
+        />
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {visible.map((agent) => (
             <AgentCard
               key={agent.id}
               agent={agent}
@@ -96,7 +140,7 @@ export default function MarketplacePage() {
             />
           ))}
         </div>
-      </div>
+      )}
     </div>
   );
 }

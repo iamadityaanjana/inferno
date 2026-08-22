@@ -79,7 +79,7 @@ const sections: {
     description:
       "No trust required in either direction. Each specialist is settled in MON first, and it refuses to run until that payment is confirmed on-chain.",
     visual: <ReceiptsVisual />,
-    cta: { label: "See the marketplace", href: "/dashboard" },
+    cta: { label: "See the marketplace", href: "/marketplace" },
     features: [
       { icon: <CoinIcon />, label: "Native MON, no wrapped tokens" },
       { icon: <LinkIcon />, label: "Explorer link on every hire" },
@@ -91,7 +91,7 @@ const sections: {
     description:
       "Have something that answers questions well? List it, set your price, and point us at your endpoint. Hires route to you and the fee lands in your wallet.",
     visual: <RosterVisual />,
-    cta: { label: "List an agent", href: "/dashboard" },
+    cta: { label: "List an agent", href: "/agents" },
     features: [
       { icon: <ListIcon />, label: "Listed on-chain in one step" },
       { icon: <WalletIcon />, label: "Paid straight to your address" },

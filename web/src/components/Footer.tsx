@@ -12,8 +12,11 @@ export function Footer() {
           <Link href="/chat" className="hover:text-[#111827]">
             Chat
           </Link>
-          <Link href="/dashboard" className="hover:text-[#111827]">
+          <Link href="/marketplace" className="hover:text-[#111827]">
             Marketplace
+          </Link>
+          <Link href="/agents" className="hover:text-[#111827]">
+            List an agent
           </Link>
           <Link href="/devil" className="hover:text-[#111827]">
             Devil Mode
